@@ -5,7 +5,6 @@ This is a SENDER node. Sends a packet to headless receiver and blinks a green LE
 #include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
-#include "printf.h"
 
 const unsigned int RED = 6;
 const unsigned int GREEN = 8;
@@ -22,12 +21,6 @@ void setup(void)
   pinMode(GREEN, OUTPUT);
   pinMode(RED, OUTPUT);
   
-  Serial.begin(57600);
-  printf_begin();
-
-  printf("\n\rRF24/examples/GettingStarted/\n\r");
-  printf("ROLE: %s\n\r",role_friendly_name[role]);
-
   radio.begin();
 
   // optionally, increase the delay between retries & # of retries
@@ -35,8 +28,6 @@ void setup(void)
   
   radio.openWritingPipe(pipes[0]);
   radio.openReadingPipe(1,pipes[1]);
-
-  radio.printDetails();
 }
 
 void loop(void)
@@ -50,14 +41,8 @@ void loop(void)
     radio.stopListening();  //Stop listening so we can write
     
     unsigned long time = millis();      // Take the time, and send it.  This will block until complete
-    printf("Now sending %lu...",time);
     bool ok = radio.write( &time, sizeof(unsigned long) );
     
-    if (ok)
-      printf("ok...");
-    else
-      printf("failed.\n\r");
-
     radio.startListening();      // Now, continue listening
 
     // Wait here until we get a response, or timeout (200ms)
@@ -70,7 +55,6 @@ void loop(void)
     // Describe the results
     if ( timeout )
     {
-      printf("Failed, response timed out.\n\r");
       digitalWrite(RED, HIGH);
       delay(500);
       digitalWrite(RED, LOW);
@@ -82,8 +66,6 @@ void loop(void)
       unsigned long got_time;
       radio.read( &got_time, sizeof(unsigned long) );
 
-      // Spew it
-      printf("Got response %lu, round-trip delay: %lu\n\r", got_time, millis() - got_time);
       digitalWrite(GREEN, HIGH);
       delay(500);
       digitalWrite(GREEN, LOW);

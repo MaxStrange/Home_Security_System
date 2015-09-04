@@ -6,7 +6,6 @@ the sender. It waits for the sender to send a packet and then it sends back the 
 #include <SPI.h>
 #include "nRF24L01.h"
 #include "RF24.h"
-#include "printf.h"
 
 RF24 radio(9,10);  // Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
 const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };  // Radio pipe addresses for the 2 nodes to communicate.
