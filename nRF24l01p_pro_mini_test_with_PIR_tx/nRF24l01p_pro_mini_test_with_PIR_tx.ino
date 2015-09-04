@@ -36,6 +36,16 @@ void setup(void)
 void loop(void)
 {
   /**Poll the PIR line to check for motion*/
+  check_for_motion();
+  
+  /**Regardless of what the PIR says, send something*/
+  send_state();
+  
+  delay(1000);
+}
+
+void check_for_motion(void)
+{
   val = digitalRead(PIR);
   if (val == HIGH)
   {
@@ -63,19 +73,13 @@ void loop(void)
       pirState = LOW;
     }
   }
-  
-  /**Regardless of what the PIR says, send something*/
-  send_state();
-
-  // Try again 1s later
-  delay(1000);
 }
 
 void send_state(void)
 {
   radio.stopListening();  //Stop listening so we can write
-  unsigned long time = millis();      // Take the time, and send it.  This will block until complete
-  bool ok = radio.write( &time, sizeof(unsigned long) );
+  int state = pirState;
+  bool ok = radio.write( &state, sizeof(int) );
   radio.startListening();      // Now, continue listening
 
   // Wait here until we get a response, or timeout (200ms)
@@ -92,8 +96,8 @@ void send_state(void)
   }
   else
   {
-    // Grab the response, compare, and send to debugging spew
-    unsigned long got_time;
-    radio.read( &got_time, sizeof(unsigned long) );
+    // check for a time stamp response
+    unsigned long got_time_of_receipt;
+    radio.read( &got_time_of_receipt, sizeof(unsigned long) );
  }
 }
