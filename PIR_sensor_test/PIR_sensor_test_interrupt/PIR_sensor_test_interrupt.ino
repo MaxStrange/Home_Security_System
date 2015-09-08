@@ -9,7 +9,7 @@ const unsigned int PIR = 3;               // choose the input pin (for PIR senso
 
 int pir_state = LOW;             // we start, assuming no motion detected
 
-bool motion_flag = false; //Flag to let the Arduino know that motion has been detected
+volatile bool motion_flag = false; //Flag to let the Arduino know that motion has been detected
 
 void setup()
 {

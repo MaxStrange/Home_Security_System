@@ -19,7 +19,7 @@ const unsigned int PIR_INTERRUPT = 1;//meaning, pin 3's external interrupt
 
 /**Variables*/
 int pir_state = HIGH;             // we start, assuming no motion detected (with an inverted signal)
-bool motion_flag = false; //Flag to let the Arduino know that motion has been detected
+volatile bool motion_flag = false; //Flag to let the Arduino know that motion has been detected
 
 
 
