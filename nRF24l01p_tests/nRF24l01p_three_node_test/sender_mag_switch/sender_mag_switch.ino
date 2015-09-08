@@ -1,5 +1,6 @@
 /**
-This is the sketch for the sender that is connected to a magnetic switch. It sends either the ALL CLEAR
+This is the sketch for the sender that is connected to a magnetic switch.
+It waits for the system_arm broadcast, and then starts sending either the ALL CLEAR
 signal or the INTRUDER_ALERT signal.
 */
 #include <SPI.h>
@@ -17,6 +18,7 @@ const uint64_t talking_pipes[3] = { 0xF88145FA54, 0xF88145FAB1, 0xF88145FA23 };
 const uint64_t listening_pipes[3] = { 0xE77034E943, 0xE77034E901, 0xE77034E91A };
 
 /**Switch code*/
+bool system_armed = false;
 int switch_state = HIGH;
 int val = HIGH;
 
@@ -30,11 +32,17 @@ void setup(void)
   radio.begin();
   radio.setRetries(15,15);
   radio.openWritingPipe(talking_pipes[1]);
-  radio.openReadingPipe(2, listening_pipes[2]);
+  radio.openReadingPipe(1, listening_pipes[0]);
+  radio.startListening();
 }
 
 void loop(void)
 {
+  while (! system_armed)
+  {
+    check_messages();//wait around for the message to enter armed mode
+  }
+  
   /**Poll the switch line to check for intruder*/
   check_for_entry();
   
@@ -42,6 +50,23 @@ void loop(void)
   send_state();
   
   delay(1000);
+}
+
+void check_messages(void)
+{
+  bool arm_the_system = system_armed;
+  
+  uint8_t pipe_number;
+  if (radio.available(&pipe_number))
+  {
+    bool done = false;
+    while (!done)
+    {
+      done = radio.read(&arm_the_system, sizeof(bool));
+    }
+  }
+  
+  system_armed = arm_the_system;
 }
 
 void check_for_entry(void)

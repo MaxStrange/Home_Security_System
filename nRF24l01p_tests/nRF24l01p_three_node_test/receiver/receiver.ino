@@ -1,5 +1,7 @@
 /**
-This sketch is for the receiver in the three node topology. It listens to the other two nodes
+This sketch is for the receiver in the three node topology. 
+First it waits 3 seconds, then it broadcasts the system_armed message.
+Then it listens to the other two nodes
 and reacts accordingly (lights its red LED when intruder alert, green otherwise). It doesn't
 send any response back though (at least not in this version).
 */
@@ -14,10 +16,11 @@ const unsigned int GREEN = 6;
 /**Radio code*/
 const int TIMEOUT = 200;//ms to wait for timeout
 RF24 radio(9,10);  // Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
-const uint64_t talking_pipes[3] = { 0xF88145FA54, 0xF88145FAB1, 0xF88145FA23 };
-const uint64_t listening_pipes[3] = { 0xE77034E943, 0xE77034E901, 0xE77034E91A };
+const uint64_t talking_pipes[3] = { 0xF88145FA54, 0xF88145FAB1, 0xF88145FA23 };//pipes to talk SENDERS->RECEIVER
+const uint64_t listening_pipes[3] = { 0xE77034E943, 0xE77034E901, 0xE77034E91A };//pipes to talk RECEIVER->SENDERS
 
 bool alert_mode_is_on = false;//Whether an intruder has been detected
+bool have_not_broadcasted = true;
 
 void setup(void)
 {
@@ -28,7 +31,7 @@ void setup(void)
   /**Radio*/
   radio.begin();
   radio.setRetries(15,15);
-  radio.openWritingPipe(talking_pipes[2]);
+//  radio.openWritingPipe(talking_pipes[2]);
   radio.openReadingPipe(1, talking_pipes[0]);
   radio.openReadingPipe(2, talking_pipes[1]);
   radio.startListening();
@@ -36,8 +39,29 @@ void setup(void)
 
 void loop(void)
 {
+  if (have_not_broadcasted)
+  {
+    delay(3000);
+    broadcast();
+    have_not_broadcasted = false;
+  }
+  
   display_alert_status();
   check_messages();
+}
+
+void broadcast(void)
+{
+  radio.stopListening();
+  
+  for (int i = 0; i < 3; i++)
+  {
+    radio.openWritingPipe(listening_pipes[i]);
+    bool arm_system = true;
+    radio.write(&arm_system, sizeof(bool));
+  }
+  
+  radio.startListening();
 }
 
 void check_messages(void)

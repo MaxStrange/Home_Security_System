@@ -1,5 +1,7 @@
 /**
-This sketch is for the PIR sender. It sends its current PIR signal.
+This sketch is for the PIR sender. It waits for a signal from
+the receiver node and then starts sending its current
+PIR signal.
 */
 #include <SPI.h>
 #include "nRF24L01.h"
@@ -17,6 +19,7 @@ const uint64_t talking_pipes[3] = { 0xF88145FA54, 0xF88145FAB1, 0xF88145FA23 };
 const uint64_t listening_pipes[3] = { 0xE77034E943, 0xE77034E901, 0xE77034E91A };
 
 /**PIR code*/
+bool system_armed = false;
 int pirState = LOW;
 int val = 0;
 
@@ -31,11 +34,17 @@ void setup(void)
   radio.begin();
   radio.setRetries(15,15);
   radio.openWritingPipe(talking_pipes[0]);
-  radio.openReadingPipe(1, listening_pipes[2]);
+  radio.openReadingPipe(1, listening_pipes[1]);
+  radio.startListening();
 }
 
 void loop(void)
 {
+  while (! system_armed)
+  {
+    check_messages();//wait around until armed
+  }
+  
   /**Poll the PIR line to check for motion*/
   check_for_motion();
   
@@ -43,6 +52,23 @@ void loop(void)
   send_state();
   
   delay(1000);
+}
+
+void check_messages(void)
+{
+  bool arm_the_system = system_armed;
+  
+  uint8_t pipe_number;
+  if (radio.available(&pipe_number))
+  {
+    bool done = false;
+    while (!done)
+    {
+      done = radio.read(&arm_the_system, sizeof(bool));
+    }
+  }
+  
+  system_armed = arm_the_system;
 }
 
 void check_for_motion(void)
