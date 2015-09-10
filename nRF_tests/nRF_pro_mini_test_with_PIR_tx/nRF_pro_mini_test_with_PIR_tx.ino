@@ -2,7 +2,6 @@
 This is the sketch for the SENDER. Sends a packet to a receiver and blinks the green LED if it gets a response; red otherwise.
 */
 #include <SPI.h>
-#include "nRF24L01.h"
 #include "RF24.h"
 
 /**Pin declarations*/
@@ -13,7 +12,7 @@ const unsigned int PIR = 4;
 /**Radio code*/
 const int TIMEOUT = 200;//ms to wait for timeout
 RF24 radio(9,10);  // Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
-const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };  // Radio pipe addresses for the 2 nodes to communicate.
+byte pipes[][6] = { "1Node", "2Node" };
 
 /**PIR code*/
 int pirState = LOW;
@@ -28,9 +27,9 @@ void setup(void)
     
   /**Radio*/
   radio.begin();
-  radio.setRetries(15,15);
-  radio.openWritingPipe(pipes[0]);
-  radio.openReadingPipe(1,pipes[1]);
+  radio.setPALevel(RF24_PA_LOW);
+  radio.openWritingPipe(pipes[1]);
+  radio.openReadingPipe(1,pipes[0]);
 }
 
 void loop(void)
@@ -79,15 +78,20 @@ void send_state(void)
 {
   radio.stopListening();  //Stop listening so we can write
   int state = pirState;
-  bool ok = radio.write( &state, sizeof(int) );
+  radio.write( &state, sizeof(int) );
   radio.startListening();      // Now, continue listening
 
-  // Wait here until we get a response, or timeout (200ms)
   unsigned long started_waiting_at = millis();
   bool timeout = false;
-  while ( ! radio.available() && ! timeout )
+
+  while ( ! radio.available() )
+  {
     if (millis() - started_waiting_at > TIMEOUT )
+    {
       timeout = true;
+      break;
+    }
+  }
 
   // Describe the results
   if ( timeout )

@@ -4,7 +4,6 @@ Then it outputs some info on the Serial port.
 */
 
 #include <SPI.h>
-#include "nRF24L01.h"
 #include "RF24.h"
 
 /**Pin setup*/
@@ -16,7 +15,7 @@ int pirState = LOW;
 
 /**Radio*/
 RF24 radio(9,10);  // Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
-const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };  // Radio pipe addresses for the 2 nodes to communicate.
+byte pipes[][6] = { "1Node", "2Node" };
 
 
 void setup(void)
@@ -27,31 +26,26 @@ void setup(void)
   
   /**Radio*/
   radio.begin();
-  radio.setRetries(15,15);
+  radio.setPALevel(RF24_PA_LOW);
   radio.openWritingPipe(pipes[0]);
   radio.openReadingPipe(1,pipes[1]);
   radio.startListening();
+  
+  Serial.begin(115200);
 }
 
 void loop(void)
 {
-  //if data is available
   if ( radio.available() )
   {
-    // Dump the payloads until we've gotten everything
     int got_state;
-    bool done = false;
-    while (!done)
+    while (radio.available())
     {
-        // Fetch the payload, and see if this was the last one.
-        done = radio.read( &got_state, sizeof(int) );
-
- 	// Delay just a little bit to let the other unit
-	// make the transition to receiver
-	delay(20);
+        radio.read( &got_state, sizeof(int) );
     }
     
     pirState = got_state;
+    Serial.println(got_state);
     
     if (pirState == HIGH)
     {

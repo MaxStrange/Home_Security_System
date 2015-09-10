@@ -4,7 +4,6 @@ the receiver node and then starts sending its current
 PIR signal.
 */
 #include <SPI.h>
-#include "nRF24L01.h"
 #include "RF24.h"
 
 /**Pin declarations*/
@@ -15,12 +14,12 @@ const unsigned int PIR = 4;
 /**Radio code*/
 const int TIMEOUT = 200;//ms to wait for timeout
 RF24 radio(9,10);  // Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
-const uint64_t talking_pipes[3] = { 0xF88145FA54, 0xF88145FAB1, 0xF88145FA23 };
-const uint64_t listening_pipes[3] = { 0xE77034E943, 0xE77034E901, 0xE77034E91A };
+byte talking_pipes[][6] = { "1Node", "2Node" };
+byte broadcast_pipes[][6] = { "Node1", "Node2" };
 
 /**PIR code*/
 bool system_armed = false;
-int pirState = LOW;
+int pir_state = LOW;
 int val = 0;
 
 void setup(void)
@@ -32,9 +31,9 @@ void setup(void)
     
   /**Radio*/
   radio.begin();
-  radio.setRetries(15,15);
+  radio.setRetries(15, 15);
   radio.openWritingPipe(talking_pipes[0]);
-  radio.openReadingPipe(1, listening_pipes[1]);
+  radio.openReadingPipe(1, broadcast_pipes[1]);
   radio.startListening();
 }
 
@@ -61,11 +60,7 @@ void check_messages(void)
   uint8_t pipe_number;
   if (radio.available(&pipe_number))
   {
-    bool done = false;
-    while (!done)
-    {
-      done = radio.read(&arm_the_system, sizeof(bool));
-    }
+    radio.read(&arm_the_system, sizeof(bool));
   }
   
   system_armed = arm_the_system;
@@ -81,10 +76,10 @@ void check_for_motion(void)
     digitalWrite(RED, HIGH);
     digitalWrite(GREEN, LOW);
     
-    if (pirState == LOW)
+    if (pir_state == LOW)
     {
       //We just now detected motion
-      pirState = HIGH;
+      pir_state = HIGH;
     }
   }
   else
@@ -94,10 +89,10 @@ void check_for_motion(void)
     digitalWrite(GREEN, HIGH);
     digitalWrite(RED, LOW);
     
-    if (pirState == HIGH)
+    if (pir_state == HIGH)
     {
       //We just now stopped detecting motion
-      pirState = LOW;
+      pir_state = LOW;
     }
   }
 }
@@ -105,7 +100,7 @@ void check_for_motion(void)
 void send_state(void)
 {
   radio.stopListening();  //Stop listening so we can write
-  bool intruder_alert = (pirState == HIGH);
-  bool ok = radio.write( &intruder_alert, sizeof(int) );
+  bool intruder_alert = (pir_state == HIGH);
+  radio.write( &intruder_alert, sizeof(int) );
   radio.startListening();
 }

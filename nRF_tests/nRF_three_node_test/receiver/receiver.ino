@@ -1,12 +1,11 @@
 /**
-This sketch is for the receiver in the three node topology. 
-First it waits 3 seconds, then it broadcasts the system_armed message.
+This sketch is for the receiver in the three node topology.
+First, it broadcasts the "arm the system" message several times to wake up the system.
 Then it listens to the other two nodes
 and reacts accordingly (lights its red LED when intruder alert, green otherwise). It doesn't
 send any response back though (at least not in this version).
 */
 #include <SPI.h>
-#include "nRF24L01.h"
 #include "RF24.h"
 
 /**Pin declarations*/
@@ -16,10 +15,11 @@ const unsigned int GREEN = 6;
 /**Radio code*/
 const int TIMEOUT = 200;//ms to wait for timeout
 RF24 radio(9,10);  // Set up nRF24L01 radio on SPI bus plus pins 9 & 10 
-const uint64_t talking_pipes[3] = { 0xF88145FA54, 0xF88145FAB1, 0xF88145FA23 };//pipes to talk SENDERS->RECEIVER
-const uint64_t listening_pipes[3] = { 0xE77034E943, 0xE77034E901, 0xE77034E91A };//pipes to talk RECEIVER->SENDERS
+byte talking_pipes[][6] = { "1Node", "2Node" };
+byte broadcast_pipes[][6] = { "Node1", "Node2" };
 
-bool alert_mode_is_on = false;//Whether an intruder has been detected
+bool pipe1_alert = false;
+bool pipe2_alert = false;
 bool have_not_broadcasted = true;
 
 void setup(void)
@@ -30,8 +30,7 @@ void setup(void)
     
   /**Radio*/
   radio.begin();
-  radio.setRetries(15,15);
-//  radio.openWritingPipe(talking_pipes[2]);
+  radio.setRetries(15, 15);
   radio.openReadingPipe(1, talking_pipes[0]);
   radio.openReadingPipe(2, talking_pipes[1]);
   radio.startListening();
@@ -41,8 +40,9 @@ void loop(void)
 {
   if (have_not_broadcasted)
   {
-    delay(3000);
-    broadcast();
+    for (int i = 0; i < 15; i++)//broadcast the wake up signal to all nodes 15 times to make sure they all wake up
+      broadcast();
+    
     have_not_broadcasted = false;
   }
   
@@ -54,9 +54,9 @@ void broadcast(void)
 {
   radio.stopListening();
   
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 2; i++)
   {
-    radio.openWritingPipe(listening_pipes[i]);
+    radio.openWritingPipe(broadcast_pipes[i]);
     bool arm_system = true;
     radio.write(&arm_system, sizeof(bool));
   }
@@ -66,26 +66,27 @@ void broadcast(void)
 
 void check_messages(void)
 {
-  bool intruder_alert = alert_mode_is_on;
-  
-  uint8_t pipe_number;//in case you want it
+  bool intruder_alert = (pipe1_alert || pipe2_alert);
+  uint8_t pipe_number;
   if (radio.available(&pipe_number))
   {
-    //Dump the payloads until we've gotten everything
-    bool done = false;
-    while (!done)
-    {
-      //Fetch the payload and see if this was the last one
-      done = radio.read(&intruder_alert, sizeof(bool));
-    }
+    radio.read(&intruder_alert, sizeof(bool));
   }
   
-  alert_mode_is_on = intruder_alert;
+  switch (pipe_number)
+  {
+    case 1://pipe 1
+      pipe1_alert = intruder_alert;
+      break;
+    case 2://pipe 2
+      pipe2_alert = intruder_alert;
+      break;
+  }
 }
 
 void display_alert_status(void)
 {
-  if (alert_mode_is_on)
+  if (pipe1_alert || pipe2_alert)
   {
     digitalWrite(GREEN, LOW);
     digitalWrite(RED, HIGH);
