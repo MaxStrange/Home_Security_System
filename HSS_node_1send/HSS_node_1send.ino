@@ -21,7 +21,6 @@ and waiting for the arm signal.
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
-const unsigned int NUMBER_OF_NODES = 5;//Number of nodes in the system including this one
 
 /**Pin declarations**/
 const int SENSORS = 3;//PIR and Mag switch through a NOR gate - so LOW when bad guy detected
@@ -37,7 +36,7 @@ void setup(void)
   /**Pins**/
   pinMode(SENSORS, INPUT);
   
-    /**Radio**/
+  /**Radio**/
   radio.begin();
   radio.setRetries(15, 15);//Retry 15 times with a delay of 15 microseconds between attempts
   radio.openWritingPipe(node_ids[1]);//open up a writing pipe to the accumulator node (the accumulator node reads pipes 1 through 4)

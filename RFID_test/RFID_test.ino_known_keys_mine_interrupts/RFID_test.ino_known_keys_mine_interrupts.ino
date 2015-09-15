@@ -1,25 +1,41 @@
 /**
-This sketch reads a single card key in to its buffer and
-then checks it against its known tags.
+This sketch waits for an interrupt to get it to
+read a single card key in to its buffer and
+then check it against its known tags.
 */
 #include <SoftwareSerial.h>
 
-SoftwareSerial RFID(6, 7); // RX and TX
+SoftwareSerial RFID(3, 4); // RX and TX
 
 int key_a[14] = { 2, 55, 67, 48, 48, 53, 54, 56, 51, 54, 65, 67, 51, 3 };
 int key_b[14] = { 2, 55, 67, 48, 48, 49, 57, 68, 56, 66, 51, 48, 69, 3 };
 int key_c[14] = { 2, 55, 67, 48, 48, 53, 54, 57, 53, 55, 57, 67, 54, 3 };
 int incoming_key[14] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 }; // used for read comparisons
 
+volatile boolean ready_to_read = false;
+
 void setup(void)
 {
   RFID.begin(9600);
   Serial.begin(9600);
+  
+  attachInterrupt(1, read_in_queue_ISR, RISING);
 }
 
 void loop(void)
 {
-  read_incoming();
+  if (ready_to_read)
+  {
+    read_incoming();
+    ready_to_read = false;
+    attachInterrupt(1, read_in_queue_ISR, RISING);
+  }
+}
+
+void read_in_queue_ISR(void)
+{
+  ready_to_read = true;
+  detachInterrupt(1);
 }
 
 void read_incoming(void)
