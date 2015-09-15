@@ -1,8 +1,8 @@
 /**
-This is the 0.1 version of the accumulator node. It should be
+This is the 0.2 version of the accumulator node. It should be
 paired with the sender sketch found in the same folder as this sketch.
 
-This version tests the various modes and countdowns.
+This version tests the countdowns and modes along with sleeping in between each interrupt from the radio.
 
 The node hangs out until an interrupt from the nRF comes in. If it received a signal to enter
 the all_clear mode, it enters all_clear regardless of what state it is currently in (effectively resetting it). If it receives
@@ -11,6 +11,10 @@ down. If it doesn't get the next danger signal in that time, it resets to all_cl
 counts down from a different value. If it receives a danger signal during that time, it resets the counter. If it doesn't,
 it resets to all_clear mode. Again, if at any time it receives the disarm signal, it enters the all_clear mode.
 */
+#include <avr/interrupt.h>
+#include <avr/power.h>
+#include <avr/sleep.h>
+#include <avr/io.h>
 #include <SPI.h>
 #include "RF24.h"
 
@@ -63,6 +67,13 @@ void loop(void)
   {
     countdown_timer = 0;
     danger_level = ALL_CLEAR_MODE;
+    
+    //when in all clear mode, go to sleep
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleep_enable();
+    Serial.println("Sleeping.");
+    sleep_mode();
+    Serial.println("Just woke up!");
   } 
 }
 

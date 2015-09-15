@@ -44,7 +44,7 @@ void setup(void)
   radio.openReadingPipe(2, talking_pipes[1]);
   radio.startListening();
   
-  //Serial.begin(115200);
+  Serial.begin(115200);
 }
 
 void loop(void)
@@ -55,15 +55,14 @@ void loop(void)
       broadcast();
       
     have_not_broadcasted = false;
-    //Serial.println("Attaching ISR");
     attachInterrupt(0, check_messages_ISR, LOW);
   }
   
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
-  //Serial.println("Sleep.");
+  Serial.println("Sleep.");
   sleep_mode();
-  //Serial.println("Awake.");
+  Serial.println("Awake.");
 }
 
 void broadcast(void)
@@ -103,11 +102,11 @@ void check_messages_ISR(void)
   {
     case 1://pipe 1
       pipe1_alert = intruder_alert;
-      //if (intruder_alert) Serial.println("Pipe 1 alert!"); else Serial.println("Pipe 1 clear.");
+      if (intruder_alert) Serial.println("Pipe 1 alert!"); else Serial.println("Pipe 1 clear.");
       break;
     case 2://pipe 2
       pipe2_alert = intruder_alert;
-      //if (intruder_alert) Serial.println("Pipe 2 alert!"); else Serial.println("Pipe 2 clear.");
+      if (intruder_alert) Serial.println("Pipe 2 alert!"); else Serial.println("Pipe 2 clear.");
       break;
   }
   
