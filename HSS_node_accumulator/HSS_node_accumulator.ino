@@ -36,7 +36,8 @@ const int RADIO_PIN_2 = 10;
 
 /**Radio code**/
 RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
-byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" };//Accumulator and four other nodes. Node 4send is the arm/disarm node
+//Accumulator and four other nodes. Node 4send is the arm/disarm node. The fifth is a private channel from node4 to accmltr
+byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5xxxx" };
 
 /**State**/
 volatile bool system_armed = false;
@@ -57,7 +58,8 @@ void setup(void)
   radio.openReadingPipe(1, node_ids[1]);
   radio.openReadingPipe(2, node_ids[2]);
   radio.openReadingPipe(3, node_ids[3]);
-  radio.openReadingPipe(4, node_ids[4]);//arm/disarm node
+  radio.openReadingPipe(4, node_ids[4]);//arm/disarm node broadcast channel
+  radio.openReadingPipe(5, node_ids[5]);//private channel to arm/disarm node
   radio.startListening();
   
   attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 2
@@ -140,6 +142,9 @@ void check_messages_ISR(void)
   }
   else if (signal == THREAT_SIGNAL)
   {
+    if (reading_pipe_number == 5)
+      reading_pipe_number = 4;//Should have made the private channel be the fourth node and the broadcast channel the fifth, but too late now!
+    
     /**If it isn't a disarm signal, it is a threat signal. Ignore it if it is from a radio we already heard threat from**/
     if (alert_from_node[reading_pipe_number])//number could be 1, 2, 3, etc. 0 is reserved for accumulator node (this one).
       return;
