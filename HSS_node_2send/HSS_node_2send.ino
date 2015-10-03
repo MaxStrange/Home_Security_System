@@ -22,6 +22,7 @@ and waiting for the arm signal.
 #include "RF24.h"
 
 /**Constants**/
+const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send the signal before giving up
 const unsigned int THRESHOLD_AMPLITUDE = 50;//needs to be fiddled with
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
@@ -76,7 +77,7 @@ void sensor_ISR(void)
 {
   //Bad guys are present! Send a threat signal!
   radio.stopListening();
-  radio.write(&THREAT_SIGNAL, sizeof(uint16_t));
+  write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
   radio.startListening();
 }
 
@@ -87,7 +88,7 @@ void check_wake_up_ISR(void)
   {
     //Bad guys! Warn the others!
     radio.stopListening();
-    radio.write(&THREAT_SIGNAL, sizeof(uint16_t));
+    write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
     radio.startListening();
   }
   
@@ -114,4 +115,14 @@ void check_wake_up_ISR(void)
   {
     arm_system();
   }
+}
+
+boolean write_to_radio(const void * to_write, uint8_t len)
+{
+  for (int i = 0; i < TIMES_TO_SEND; i++)
+  {
+    if (radio.write(to_write, len))
+      return true;
+  }
+  return false;
 }

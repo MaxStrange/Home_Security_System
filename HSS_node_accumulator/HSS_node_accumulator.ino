@@ -50,7 +50,6 @@ void setup(void)
   /**Pins**/
   pinMode(SENSORS, INPUT);
   pinMode(SPEAKER, OUTPUT);
-  digitalWrite(SPEAKER, LOW);//Don't wake the neighbors when you power up!
   
   /**Radio**/
   radio.begin();

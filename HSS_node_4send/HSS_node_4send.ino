@@ -1,5 +1,5 @@
 /**
-This is the 4send node. It is The node responsible for sending
+This is the 4send node. It is the node responsible for sending
 the arm/disarm signal to the rest of the nodes. It also
 has sensors (PIR and magnetic switch) through a NOR
 gate.
@@ -35,6 +35,7 @@ it sends a threat signal to the accumulator node.
 #include "RF24.h"
 
 /**Constants**/
+const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a signal before giving up
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
@@ -61,7 +62,8 @@ int incoming_key[14] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 }; // used for read compari
 /**State**/
 volatile boolean maybe_read_a_key = false;
 volatile boolean disarm_flag = false;
-volatile boolean arm_flag = false;
+volatile boolean arm_switch_flag = false;
+volatile boolean arm_signal_heard_flag = false;
 
 void setup(void)
 {
@@ -86,7 +88,7 @@ void loop(void)
     if (read_incoming())  //a known key means disarm the system
     {
       broadcast_signal(DISARM_SIGNAL);
-      arm_flag = false;//If the software serial is what woke us up, it wasn't the arm switch - and even if it was, we obviously don't want to arm
+      arm_switch_flag = false;//If the software serial is what woke us up, it wasn't the arm switch - and even if it was, we obviously don't want to arm
     }
     
     maybe_read_a_key = false;//clear the flag
@@ -98,13 +100,19 @@ void loop(void)
     disarm_flag = false;//clear the flag
   }
   
-  if (arm_flag)
+  if (arm_switch_flag)
   {//arm the system - broadcast the arm signal and then arm yourself
-    delay(60000);//delay a full minute to give people time to leave the area before telling the system to arm
+    delay(30000);//delay half a minute to give people time to leave the area before telling the system to arm
     
     broadcast_signal(ARM_SIGNAL);
-    arm_flag = false;//clear the flag
+    arm_switch_flag = false;//clear the flag
     attachInterrupt(1, sensor_ISR, LOW);//arm yourself too
+  }
+  
+  if (arm_signal_heard_flag)
+  {//arm this particular node - the system has been broadcasted to already by the rPi
+    arm_signal_heard_flag = false;//clear the flag
+    attachInterrupt(1, sensor_ISR, LOW);//arm yourself
   }
   
   //All done with work that needed to be done. Put the RFID/nRF interrupt back on and go to sleep.
@@ -133,14 +141,14 @@ void arm_disarm_ISR(void)
     if (signal == DISARM_SIGNAL)
       disarm_flag = true;
     else if (signal == ARM_SIGNAL)
-      arm_flag = true;
+      arm_signal_heard_flag = true;
   }
   
   /**If not rx, was it the radio? If so, don't care. But if it wasn't, then it MIGHT have been the arm switch.**/
   if (!fail && !tx)
-    arm_flag = true;//if it wasn't the software serial, it was the arm switch - check that later
+    arm_switch_flag = true;//if it wasn't the software serial, it was the arm switch - check that later
   
-  detachInterrupt(0);//Don't interrupt again until flags have been dealt with
+  detachInterrupt(0);//Don't interrupt again until flags have been dealt with - this should also serve to debounce the arm switch
   detachInterrupt(1);
 }
 
@@ -149,14 +157,14 @@ void sensor_ISR(void)
   //If this ISR is fired, it is because we are armed and either the mag switch is open or the PIR saw something
   radio.stopListening();
   radio.openWritingPipe(node_ids[5]);//open the private channel between this node and the accumulator
-  radio.write(&THREAT_SIGNAL, sizeof(uint16_t));
+  write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
   radio.openWritingPipe(node_ids[4]);//reopen the broadcast channel - close the other channel
 }
 
 void broadcast_signal(uint16_t signal)
 {
   radio.stopListening();
-  radio.write(&signal, sizeof(uint16_t));
+  write_to_radio(&signal, sizeof(uint16_t));
 }
 
 boolean read_incoming(void)
@@ -203,4 +211,14 @@ boolean compare_keys(int aa[14], int bb[14])
     ff = true;
   }
   return ff;
+}
+
+boolean write_to_radio(const void * to_write, uint8_t len)
+{
+  for (int i = 0; i < TIMES_TO_SEND; i++)
+  {
+    if (radio.write(to_write, len))
+      return true;
+  }
+  return false;
 }
