@@ -22,7 +22,7 @@ typedef enum { ALL_CLEAR_MODE, ALERT_MODE, INTRUDER_DETECTED_MODE } alert_level_
 
 /**Constants**/
 const unsigned long ALARM_COUNTDOWN = 30000;//30,000 milliseconds (30 seconds)//The time the alarm sounds for
-const unsigned long INTRUDER_COUNTDOWN = 45000;//45,000 milliseconds (45 seconds)//The amount of time to wait for a second threat signal before reset
+const unsigned long INTRUDER_COUNTDOWN = 20000;//20,000 milliseconds (20 seconds)//The amount of time to wait for a second threat signal before reset
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
@@ -63,12 +63,15 @@ void setup(void)
   
   attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 2
   attachInterrupt(1, sensor_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
+  
+  Serial.begin(115200);
 }
 
 void loop(void)
 { 
   if (! system_armed)
   {
+    Serial.println("Going to sleep.");
     //Just go to sleep until the system is armed
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
@@ -82,12 +85,15 @@ void loop(void)
   }
   else if (countdown_timer > 0)
   {
+    Serial.print("Counting down: "); Serial.println(countdown_timer);
     countdown_timer -= 1000;
   }
   else
   {
+    Serial.println("Disarming.");
     disarm();
     
+    Serial.println("All clear, so going back to sleep.");
     //when in all clear mode, go to sleep
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
@@ -98,6 +104,7 @@ void loop(void)
 
 void sensor_ISR(void)
 {
+  Serial.println("Detaching sensor ISR. Sensors will no longer work on this node until disarm.");
   detachInterrupt(1);//Now that we have seen something with this node, don't bother sensing any more until we get disarmed.
   
   if (alert_from_node[0])
@@ -169,7 +176,8 @@ void disarm(void)
   for (int i = 0; i < NUMBER_OF_NODES; i++)
     alert_from_node[i] = false;
  
-  attachInterrupt(0, check_messages_ISR, LOW);   
+  attachInterrupt(0, check_messages_ISR, LOW);
+  attachInterrupt(1, sensor_ISR, LOW);  
 }
 
 void increase_threat_level(void)
@@ -177,16 +185,25 @@ void increase_threat_level(void)
   switch (danger_level)
   {
     case ALL_CLEAR_MODE://start counting down while you wait for the next signal
+      Serial.println("Upgrading threat level to alert mode!");
       danger_level = ALERT_MODE;
       countdown_timer = INTRUDER_COUNTDOWN;
+      system_armed = true;
       break;
     case ALERT_MODE://start sounding the alarm
+      Serial.println("Upgrading threat level to intruder detected mode! Sound the alarm!");
       danger_level = INTRUDER_DETECTED_MODE;
       digitalWrite(SPEAKER, HIGH);//sound the alarm!
       countdown_timer = ALARM_COUNTDOWN;
+      system_armed = true;
       break;
     case INTRUDER_DETECTED_MODE://reset alarm countdown
+      Serial.println("Reset the alarm countdown! Bad guy(s) still here!");
       countdown_timer = ALARM_COUNTDOWN;
+      system_armed = true;
+      break;
+    default:
+      Serial.println("An error has occurred in figuring out what danger level we are at.");
       break;
   }
 }

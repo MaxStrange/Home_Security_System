@@ -24,9 +24,9 @@ RF24 radio(9,10);
 
 byte addresses[][6] = { "1Node", "2Node" };
 
-bool role = 0;
+bool role = 1;
 
-bool radioNumber = 1;
+bool radioNumber = 0;//change to zero for one of the radios and one for the other
 
 
 void setup(void)
@@ -37,8 +37,7 @@ void setup(void)
   Serial.println(F("*** PRESS 'T' to begin transmitting to the other node")); 
   
   radio.begin();
-  
-  radio.setPALevel(RF24_PA_LOW);
+  radio.setRetries(15, 15);
   
   if (radioNumber)
   {
@@ -65,7 +64,7 @@ void loop(void)
     unsigned long time = micros();
     if (!radio.write( &time, sizeof(unsigned long) ))
     {
-      Serial.println(F("failed"));
+      Serial.println(F("failed to send."));
     }
     
     radio.startListening();
@@ -75,7 +74,7 @@ void loop(void)
     
     while ( ! radio.available() )
     {
-      if (micros() - started_waiting_at > 200000 )
+      if (micros() - started_waiting_at > 500000 )
       {
         timeout = true;
         break;
@@ -114,7 +113,8 @@ void loop(void)
     
     if ( radio.available() )
     {
-      while (radio.available())
+      uint8_t pipe_num;
+      while (radio.available(&pipe_num))
       {
         radio.read( &got_time, sizeof(unsigned long));
       }
@@ -124,7 +124,7 @@ void loop(void)
       radio.startListening();
       
       Serial.print(F("Sent response: ")); Serial.println(got_time);
-    }
+    }    
   }
 
   //

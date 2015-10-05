@@ -23,6 +23,8 @@ int val = HIGH;
 
 void setup(void)
 {
+  Serial.begin(9600);
+  
   /**Pin sets*/
   pinMode(GREEN, OUTPUT);
   pinMode(SWITCH, INPUT);
@@ -42,6 +44,8 @@ void loop(void)
     check_messages();//wait around for the message to enter armed mode
   }
   
+  Serial.println("ARMED");
+  
   /**Poll the switch line to check for intruder*/
   check_for_entry();
   
@@ -59,6 +63,7 @@ void check_messages(void)
   if (radio.available(&pipe_number))
   {
     radio.read(&arm_the_system, sizeof(bool));
+    //Serial.print("Received: "); Serial.println(arm_the_system);
   }
   
   system_armed = arm_the_system;

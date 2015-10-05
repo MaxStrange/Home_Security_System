@@ -40,18 +40,21 @@ void setup(void)
   radio.openReadingPipe(2, talking_pipes[1]);
   radio.startListening();
   
-  //Serial.begin(115200);
+  Serial.begin(9600);
 }
 
 void loop(void)
 {
+  delay(500);
+  Serial.println("Loop");
   if (have_not_broadcasted)
   {
+    Serial.println("Broadcasting.");
     for (int i = 0; i < 15; i++)
       broadcast();
       
     have_not_broadcasted = false;
-    //Serial.println("Attaching ISR");
+    Serial.println("Attaching ISR");
     attachInterrupt(0, check_messages_ISR, LOW);
   }
   
@@ -60,15 +63,19 @@ void loop(void)
 
 void broadcast(void)
 {
+  Serial.println("Stop listening.");
   radio.stopListening();
   
   for (int i = 0; i < 2; i++)
   {
+    Serial.println("Open writing pipe.");
     radio.openWritingPipe(broadcast_pipes[i]);
     bool arm_system = true;
+    Serial.println("Write.");
     radio.write(&arm_system, sizeof(bool));
   }
   
+  Serial.println("Start listening again.");
   radio.startListening();
 }
 
@@ -81,25 +88,25 @@ void check_messages_ISR(void)
   uint8_t pipe_number;
   if (rx && radio.available(&pipe_number))
   {
-    //Serial.println("RX");
+    Serial.println("RX");
     radio.read(&intruder_alert, sizeof(bool));
   }
   
-//  if (fail)
-//    Serial.println("FAIL");
-//    
-//  if (tx)
-//    Serial.println("TX");
+  if (fail)
+    Serial.println("FAIL");
+    
+  if (tx)
+    Serial.println("TX");
   
   switch (pipe_number)
   {
     case 1://pipe 1
       pipe1_alert = intruder_alert;
-      //if (intruder_alert) Serial.println("Pipe 1 alert!"); else Serial.println("Pipe 1 clear.");
+      if (intruder_alert) Serial.println("Pipe 1 alert!"); else Serial.println("Pipe 1 clear.");
       break;
     case 2://pipe 2
       pipe2_alert = intruder_alert;
-      //if (intruder_alert) Serial.println("Pipe 2 alert!"); else Serial.println("Pipe 2 clear.");
+      if (intruder_alert) Serial.println("Pipe 2 alert!"); else Serial.println("Pipe 2 clear.");
       break;
   }
 }

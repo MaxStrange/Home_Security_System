@@ -77,6 +77,8 @@ void setup(void)
   
   /**RFID**/
   RFID.begin(9600);
+  
+  Serial.begin(115200);
 }
 
 void loop(void)
@@ -85,10 +87,17 @@ void loop(void)
   {//woke up and found that an RFID might be waiting.
     delay(250);//fully wake up and get an accurate reading on the RFID
     
-    if (read_incoming())  //a known key means disarm the system
-    {
-      broadcast_signal(DISARM_SIGNAL);
-      arm_switch_flag = false;//If the software serial is what woke us up, it wasn't the arm switch - and even if it was, we obviously don't want to arm
+    Serial.println("Woke up and going to try to read a key.");
+    
+    for (int i = 0; i < 20; i++)
+    {//Check several times to see if the software serial is ready with a known key
+      if (read_incoming())  //a known key means disarm the system
+      {
+        Serial.println("Read a known key. Broadcasting the disarm signal.");
+        broadcast_signal(DISARM_SIGNAL);
+        arm_switch_flag = false;//If the software serial is what woke us up, it wasn't the arm switch - and even if it was, we obviously don't want to arm
+        break;//Stop trying to read the key
+      }
     }
     
     maybe_read_a_key = false;//clear the flag
@@ -96,26 +105,32 @@ void loop(void)
   
   if (disarm_flag)
   {//disarm the system - broadcast the disarm signal and then disarm
+    Serial.println("Broadcasting the disarm signal.");
     broadcast_signal(DISARM_SIGNAL);
     disarm_flag = false;//clear the flag
   }
   
   if (arm_switch_flag)
   {//arm the system - broadcast the arm signal and then arm yourself
+    Serial.println("The arm switch was thrown. Going to give you 30 seconds to leave the area before broadcasting the arm signal.");
     delay(30000);//delay half a minute to give people time to leave the area before telling the system to arm
     
+    Serial.println("Broadcasting the arm signal.");
     broadcast_signal(ARM_SIGNAL);
     arm_switch_flag = false;//clear the flag
+    Serial.println("Attaching my own sensor interrupt.");
     attachInterrupt(1, sensor_ISR, LOW);//arm yourself too
   }
   
   if (arm_signal_heard_flag)
   {//arm this particular node - the system has been broadcasted to already by the rPi
+    Serial.println("Raspberry pi sent arm signal. Going to arm now.");
     arm_signal_heard_flag = false;//clear the flag
     attachInterrupt(1, sensor_ISR, LOW);//arm yourself
   }
   
   //All done with work that needed to be done. Put the RFID/nRF interrupt back on and go to sleep.
+  Serial.println("All done with work. Going to sleep.");
   attachInterrupt(0, arm_disarm_ISR, LOW);
   set_sleep_mode(SLEEP_MODE_STANDBY);//standby works - but no deeper - only takes 6 clock cycles to boot back up
   sleep_enable();
