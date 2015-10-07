@@ -35,6 +35,7 @@ it sends a threat signal to the accumulator node.
 #include "RF24.h"
 
 /**Constants**/
+const unsigned int SECONDS_TO_CLEAR_AREA = 3;//The number of seconds the system will give people to clear the area before arming after the arm button has been pushed
 const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a signal before giving up
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
@@ -64,6 +65,7 @@ volatile boolean maybe_read_a_key = false;
 volatile boolean disarm_flag = false;
 volatile boolean arm_switch_flag = false;
 volatile boolean arm_signal_heard_flag = false;
+volatile boolean system_is_armed = false;
 
 void setup(void)
 {
@@ -87,50 +89,51 @@ void loop(void)
   {//woke up and found that an RFID might be waiting.
     delay(250);//fully wake up and get an accurate reading on the RFID
     
-    Serial.println("Woke up and going to try to read a key.");
+    Serial.println("maybe read a key flag");
     
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < 10; i++)
     {//Check several times to see if the software serial is ready with a known key
       if (read_incoming())  //a known key means disarm the system
       {
-        Serial.println("Read a known key. Broadcasting the disarm signal.");
-        broadcast_signal(DISARM_SIGNAL);
-        arm_switch_flag = false;//If the software serial is what woke us up, it wasn't the arm switch - and even if it was, we obviously don't want to arm
+        disarm_system();
+        arm_switch_flag = false;//If the software serial is what woke us up, we don't want to arm
         break;//Stop trying to read the key
       }
     }
     
+    RFID.flush(); Serial.println("Flushed.");
     maybe_read_a_key = false;//clear the flag
+    Serial.println("maybe read a key flag cleared.");
   }
   
   if (disarm_flag)
   {//disarm the system - broadcast the disarm signal and then disarm
-    Serial.println("Broadcasting the disarm signal.");
-    broadcast_signal(DISARM_SIGNAL);
+    Serial.println("Disarm flag.");
+    disarm_system();
     disarm_flag = false;//clear the flag
+    Serial.println("Disarm flag cleared.");
   }
   
-  if (arm_switch_flag)
+  if (arm_switch_flag && !system_is_armed)
   {//arm the system - broadcast the arm signal and then arm yourself
-    Serial.println("The arm switch was thrown. Going to give you 30 seconds to leave the area before broadcasting the arm signal.");
-    delay(30000);//delay half a minute to give people time to leave the area before telling the system to arm
-    
-    Serial.println("Broadcasting the arm signal.");
-    broadcast_signal(ARM_SIGNAL);
+    Serial.println("Arm switch flag.");
     arm_switch_flag = false;//clear the flag
-    Serial.println("Attaching my own sensor interrupt.");
-    attachInterrupt(1, sensor_ISR, LOW);//arm yourself too
+    arm_system();
+    Serial.println("Arm switch flag cleared.");
   }
   
   if (arm_signal_heard_flag)
   {//arm this particular node - the system has been broadcasted to already by the rPi
-    Serial.println("Raspberry pi sent arm signal. Going to arm now.");
+    Serial.println("Arm signal heard flag.");
     arm_signal_heard_flag = false;//clear the flag
-    attachInterrupt(1, sensor_ISR, LOW);//arm yourself
+    arm_self();
+    Serial.println("Arm signal heard flag cleared.");
   }
   
   //All done with work that needed to be done. Put the RFID/nRF interrupt back on and go to sleep.
-  Serial.println("All done with work. Going to sleep.");
+  Serial.println("Sleep.");
+  delay(1000);
+  maybe_read_a_key = true;//when the software serial wakes you up, you will now try to read from it.
   attachInterrupt(0, arm_disarm_ISR, LOW);
   set_sleep_mode(SLEEP_MODE_STANDBY);//standby works - but no deeper - only takes 6 clock cycles to boot back up
   sleep_enable();
@@ -139,8 +142,8 @@ void loop(void)
 
 void arm_disarm_ISR(void)
 {
-  /**Can't tell in an interrupt if the software serial is ready - set a flag and check it when done with the ISR**/
-  maybe_read_a_key = true;
+  detachInterrupt(0);//Don't interrupt again until flags have been dealt with - this should also serve to debounce the arm switch
+  detachInterrupt(1);
   
   /**Now check the radio**/
   bool tx, fail, rx = false;
@@ -162,28 +165,71 @@ void arm_disarm_ISR(void)
   /**If not rx, was it the radio? If so, don't care. But if it wasn't, then it MIGHT have been the arm switch.**/
   if (!fail && !tx)
     arm_switch_flag = true;//if it wasn't the software serial, it was the arm switch - check that later
-  
-  detachInterrupt(0);//Don't interrupt again until flags have been dealt with - this should also serve to debounce the arm switch
-  detachInterrupt(1);
 }
 
 void sensor_ISR(void)
 {
+  detachInterrupt(0);
+  detachInterrupt(1);
   //If this ISR is fired, it is because we are armed and either the mag switch is open or the PIR saw something
   radio.stopListening();
   radio.openWritingPipe(node_ids[5]);//open the private channel between this node and the accumulator
   write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
   radio.openWritingPipe(node_ids[4]);//reopen the broadcast channel - close the other channel
+  maybe_read_a_key = false;//Reading keys is not why you woke up.
+  attachInterrupt(0, arm_disarm_ISR, LOW);
+  attachInterrupt(1, sensor_ISR, LOW);
+}
+
+void arm_self(void)
+{
+  Serial.println("Arm self.");
+  
+  system_is_armed = true;
+  attachInterrupt(1, sensor_ISR, LOW);//arm yourself too
+}
+
+void arm_system(void)
+{
+  Serial.println("Arm system.");
+  
+  /*Delay for how ever many seconds, checking for a key every second*/
+    boolean do_not_arm = false;
+    for (int i = SECONDS_TO_CLEAR_AREA; i > 0; i--)
+    {
+      delay(1000);
+      if (read_incoming())
+      {
+        do_not_arm = true;
+        break;
+      }
+    }
+    
+    if (!do_not_arm)
+    {
+      broadcast_signal(ARM_SIGNAL);
+      arm_self();
+    }
+}
+
+void disarm_system(void)
+{
+  Serial.println("Disarm system.");
+  broadcast_signal(DISARM_SIGNAL);
+  system_is_armed = false;
+  detachInterrupt(1);//detach sensor ISR
 }
 
 void broadcast_signal(uint16_t signal)
 {
+  Serial.println("Broadcast signal.");
   radio.stopListening();
   write_to_radio(&signal, sizeof(uint16_t));
 }
 
 boolean read_incoming(void)
 {
+  Serial.println("Read incoming.");
   if (RFID.available())
   {
     delay(100);
@@ -230,10 +276,19 @@ boolean compare_keys(int aa[14], int bb[14])
 
 boolean write_to_radio(const void * to_write, uint8_t len)
 {
+  Serial.println("Write to radio.");
+  
   for (int i = 0; i < TIMES_TO_SEND; i++)
   {
     if (radio.write(to_write, len))
+    {
+      Serial.println("Returning true.");
       return true;
+    }
+    
+    delay(10);
   }
+  
+  Serial.println("Returning false.");
   return false;
 }

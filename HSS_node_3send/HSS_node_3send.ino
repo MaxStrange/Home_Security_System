@@ -44,11 +44,16 @@ void setup(void)
   radio.openReadingPipe(1, node_ids[4]);//arm/disarm node
   radio.startListening();
   
+  Serial.begin(115200);
+  
   attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 2
 }
 
 void loop(void)
 {
+  Serial.println("Going to sleep.");
+  
+  delay(1000);
   //Just go to sleep - interrupts take care of everything
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
@@ -57,16 +62,20 @@ void loop(void)
 
 void arm_system(void)
 {
+  Serial.println("Arming system.");
   attachInterrupt(1, sensor_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
 }
 
 void disarm(void)
 {
+  Serial.println("Disarming system.");
   detachInterrupt(1);//Don't check sensors until armed again
 }
 
 void sensor_ISR(void)
 {
+  Serial.println("Bad guys! Sending threat signal.");
+  
   //Bad guys are present! Send a threat signal!
   radio.stopListening();
   write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
@@ -90,10 +99,12 @@ void check_messages_ISR(void)
     
   if (signal == DISARM_SIGNAL)
   {
+    Serial.println("Received disarm signal.");
     disarm();
   }
   else if (signal == ARM_SIGNAL)
   {
+    Serial.println("Received arm signal.");
     arm_system();
   }
 }
