@@ -22,8 +22,7 @@ and waiting for the arm signal.
 #include "RF24.h"
 
 /**Constants**/
-const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send the signal before giving up
-const unsigned int THRESHOLD_AMPLITUDE = 50;//needs to be fiddled with
+const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a message before giving up
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
@@ -32,7 +31,6 @@ const uint16_t ARM_SIGNAL = 0x1221;
 const int PIR = 3;
 const int RADIO_PIN_1 = 9;
 const int RADIO_PIN_2 = 10;
-const int AMPLITUDE = A0;
 
 /**Radio code**/
 RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
@@ -43,33 +41,38 @@ void setup(void)
 {
   /**Pins**/
   pinMode(PIR, INPUT);
-  pinMode(AMPLITUDE, INPUT);
   
   /**Radio**/
   radio.begin();
   radio.setRetries(15, 15);//Retry 15 times with a delay of 15 microseconds between attempts
-  radio.openWritingPipe(node_ids[2]);//open up a writing pipe to the accumulator node (the accumulator node reads pipes 1 through 4)
+  radio.openWritingPipe(node_ids[1]);//open up a writing pipe to the accumulator node (the accumulator node reads pipes 1 through 4)
   radio.openReadingPipe(1, node_ids[4]);//arm/disarm node
   radio.startListening();
+  
+  Serial.begin(115200);
   
   attachInterrupt(0, check_wake_up_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 2
 }
 
 void loop(void)
 {
+  Serial.println("Going to sleep.");
+  delay(1000);
   //Just go to sleep - interrupts take care of everything
-  set_sleep_mode(SLEEP_MODE_STANDBY);
+  set_sleep_mode(SLEEP_MODE_STANDBY);//PWR_DOWN probably takes too long to catch the amplitude signal when waking up
   sleep_enable();
   sleep_mode();
 }
 
 void arm_system(void)
 {
+  Serial.println("Arming.");
   attachInterrupt(1, sensor_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
 }
 
 void disarm(void)
 {
+  Serial.println("Disarming.");
   detachInterrupt(1);//Don't check sensors until armed again
 }
 
@@ -79,21 +82,11 @@ void sensor_ISR(void)
   radio.stopListening();
   write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
   radio.startListening();
+  Serial.println("Sent a threat signal.");
 }
 
 void check_wake_up_ISR(void)
 {
-  /**Check the amplitude of the audio line to see if that was what woke us up**/
-  if (analogRead(AMPLITUDE) > THRESHOLD_AMPLITUDE)
-  {
-    //Bad guys! Warn the others!
-    radio.stopListening();
-    write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
-    radio.startListening();
-  }
-  
-  /**Now check the radio, regardless of if it was noise that woke you up - to see if it wants you to disarm.**/
-  
   /**Check what happened to trigger the interrupt**/
   bool tx, fail, rx = false;
   radio.whatHappened(tx, fail, rx);

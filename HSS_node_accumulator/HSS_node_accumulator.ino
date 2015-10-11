@@ -40,10 +40,13 @@ RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
 byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5xxxx" };
 
 /**State**/
-volatile bool system_armed = false;
+volatile boolean system_armed = false;
 volatile alert_level_type danger_level = ALL_CLEAR_MODE;
 volatile unsigned long countdown_timer = 0;
-volatile bool alert_from_node[] = { false, false, false, false, false };//Array of alerts from nodes in the system - node 0 is this node.
+volatile boolean alert_from_node[] = { false, false, false, false, false };//Array of alerts from nodes in the system - node 0 is this node.
+volatile boolean disarm_flag = false;
+volatile boolean arm_system_flag = false;
+volatile boolean adjust_threat_level_flag = false;
 
 void setup(void)
 {
@@ -62,16 +65,38 @@ void setup(void)
   radio.startListening();
   
   attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 2
-  attachInterrupt(1, sensor_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
   
   Serial.begin(115200);
 }
 
 void loop(void)
 { 
+  /*Go through the flags and deal with them*/
+  if (disarm_flag)
+  {
+    disarm_flag = false;
+    Serial.println("Disarm flag.");
+    disarm();
+  }
+  
+  if (adjust_threat_level_flag)
+  {
+    adjust_threat_level_flag = false;
+    Serial.println("Adjust threat level flag.");
+    increase_threat_level();
+  }
+  
+  if (arm_system_flag)
+  {
+    arm_system_flag = false;
+    Serial.println("Arm system flag.");
+    system_armed = true;
+  }
+  
   if (! system_armed)
   {
     Serial.println("Going to sleep.");
+    delay(1000);
     //Just go to sleep until the system is armed
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
@@ -81,19 +106,33 @@ void loop(void)
   /**Manipulate countdown timer and adjust mode accordingly**/
   if (countdown_timer > INTRUDER_COUNTDOWN)
   {//Timer has wrapped around for some reason, reset it.
+    Serial.println("Countdown timer has wrapped around. This shouldn't have happened.");
     countdown_timer = 0;
   }
   else if (countdown_timer > 0)
   {
+    for (int i = 1; i < 5; i++)
+    {
+      Serial.print("Node "); Serial.print(i); Serial.print(" "); Serial.println(alert_from_node[i]);
+    }
+
+    
     Serial.print("Counting down: "); Serial.println(countdown_timer);
     countdown_timer -= 1000;
   }
   else
   {
-    Serial.println("Disarming.");
-    disarm();
+    Serial.println("Resetting node information.");
+    digitalWrite(SPEAKER, LOW);//stop sounding the alarm
+    countdown_timer = 0;
+    danger_level = ALL_CLEAR_MODE;
+    reset_nodes();
     
     Serial.println("All clear, so going back to sleep.");
+    delay(1000);
+    if (system_armed)
+      attachInterrupt(1, sensor_ISR, LOW);
+      
     //when in all clear mode, go to sleep
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
@@ -113,17 +152,22 @@ void sensor_ISR(void)
     alert_from_node[0] = true;
    
    //if we have made it this far, it means we didn't already know that this node was on alert - increase the threat level
-   increase_threat_level();
+   adjust_threat_level_flag = true;
 }
 
 void check_messages_ISR(void)
 {
+  detachInterrupt(0);
+  
   /**Check what happened to trigger interrupt**/
   bool tx, fail, rx = false;
   radio.whatHappened(tx, fail, rx);
 
   if (!rx)
+  {
+    attachInterrupt(0, check_messages_ISR, LOW);
     return; //if it wasn't rx that woke us, we have nothing else to do.  
+  }
   
   /**If rx, get what we received**/
   uint16_t signal;
@@ -137,19 +181,22 @@ void check_messages_ISR(void)
   /**If what we received was the disarm signal, disarm the system**/
   if (signal == DISARM_SIGNAL)
   {//regardless of where we are, reset the system
-    disarm();
+    disarm_flag = true;
+    attachInterrupt(0, check_messages_ISR, LOW);
     return;
   }
   else if (signal == ARM_SIGNAL)
   {//Arm the system and return
-    system_armed = true;
-    attachInterrupt(1, sensor_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
+    arm_system_flag = true;
+    attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
     return;
   }
   else if (signal == THREAT_SIGNAL)
   {
     if (reading_pipe_number == 5)
       reading_pipe_number = 4;//Should have made the private channel be the fourth node and the broadcast channel the fifth, but too late now!
+    
+    Serial.print("Heard from: "); Serial.println(reading_pipe_number);
     
     /**If it isn't a disarm signal, it is a threat signal. Ignore it if it is from a radio we already heard threat from**/
     if (alert_from_node[reading_pipe_number])//number could be 1, 2, 3, etc. 0 is reserved for accumulator node (this one).
@@ -159,7 +206,7 @@ void check_messages_ISR(void)
     
     
     /**If we haven't left the ISR, it is because we have a new threat from a new node. Adjust mode and countdown.**/
-    increase_threat_level();
+    adjust_threat_level_flag = true;
   }
 }
 
@@ -173,11 +220,9 @@ void disarm(void)
   digitalWrite(SPEAKER, LOW);//stop sounding the alarm
   countdown_timer = 0;
   danger_level = ALL_CLEAR_MODE;
-  for (int i = 0; i < NUMBER_OF_NODES; i++)
-    alert_from_node[i] = false;
+  reset_nodes();
  
   attachInterrupt(0, check_messages_ISR, LOW);
-  attachInterrupt(1, sensor_ISR, LOW);  
 }
 
 void increase_threat_level(void)
@@ -206,4 +251,10 @@ void increase_threat_level(void)
       Serial.println("An error has occurred in figuring out what danger level we are at.");
       break;
   }
+}
+
+void reset_nodes(void)
+{
+  for (int i = 0; i < NUMBER_OF_NODES; i++)
+    alert_from_node[i] = false;
 }
