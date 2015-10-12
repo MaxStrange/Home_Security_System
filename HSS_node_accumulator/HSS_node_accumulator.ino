@@ -70,6 +70,7 @@ void setup(void)
 
 void loop(void)
 { 
+  digitalWrite(SPEAKER, HIGH);
   Serial.println("Going through the flags.");
   
   /*Go through the flags and deal with them*/
@@ -121,7 +122,7 @@ void loop(void)
   else if (! (disarm_flag || arm_system_flag) )//only enter this block if there are no flags to check
   {
     Serial.println("Resetting node information.");
-    digitalWrite(SPEAKER, LOW);//stop sounding the alarm
+    digitalWrite(SPEAKER, HIGH);//stop sounding the alarm
     countdown_timer = 0;
     danger_level = ALL_CLEAR_MODE;
     reset_nodes();
@@ -223,7 +224,7 @@ void disarm(void)
  
   system_armed = false;
   
-  digitalWrite(SPEAKER, LOW);//stop sounding the alarm
+  digitalWrite(SPEAKER, HIGH);//stop sounding the alarm
   countdown_timer = 0;
   danger_level = ALL_CLEAR_MODE;
   reset_nodes();
@@ -243,6 +244,7 @@ void adjust_threat_level(void)
   if (heard_from == 0)
   {//All clear
     countdown_timer = 0;
+    
     Serial.println("Nothing to worry about.");
     danger_level = ALL_CLEAR_MODE;
   }
@@ -250,15 +252,19 @@ void adjust_threat_level(void)
   {//Potentially intruder alert
     if (danger_level == ALL_CLEAR_MODE)
       countdown_timer = INTRUDER_COUNTDOWN;
+    
     Serial.println("Possible intruder detected.");
     danger_level = ALERT_MODE;
   }
   else
   {//Definitely intruder alert!
     if ((danger_level == ALL_CLEAR_MODE) || (danger_level == ALERT_MODE)) 
-    countdown_timer = ALARM_COUNTDOWN;
+      countdown_timer = ALARM_COUNTDOWN;
+    
     Serial.println("INTRUDER DETECTED.");
     danger_level = INTRUDER_DETECTED_MODE;
+    
+    digitalWrite(SPEAKER, LOW);
   }
 }
 

@@ -9,6 +9,13 @@ sends a threat signal to the accumulator node.
 
 If it ever receives the disarm signal, it goes back to sleeping
 and waiting for the arm signal.
+
+For now, if a node sends too many signals to the accumulator, it stops sending them
+until a disarm/arm cycle. In the future, it would be best for them to send the signal
+until the accumulator actually hears and cares about the signal. That way, if the node
+sends a signal to the accumulator and it results in a countdown that times out, the node
+isn't just left disabled until a disarm/arm cycle - instead it will send the signal again if
+it sees something.
 */
 #include <avr/interrupt.h>
 #include <avr/power.h>
@@ -19,6 +26,7 @@ and waiting for the arm signal.
 
 /**Constants**/
 const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a message before giving up
+const unsigned int MAX_TIMES_TO_SEND_SIGNAL = 15;//The maximum number of times to send the threat signal to the accumulator per disarm/arm cycle
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
@@ -32,6 +40,9 @@ const int RADIO_PIN_2 = 10;
 RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
 //Accumulator and four other nodes. Node 4send is the arm/disarm node. The fifth is a private channel from node4 to accmltr
 byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5xxxx" };
+
+/**State**/
+volatile unsigned int sent_signal_times = 0;//Number of times this node has sent the threat signal to the accumulator
 
 void setup(void)
 {
@@ -68,17 +79,23 @@ void arm_system(void)
 
 void disarm(void)
 {
+  sent_signal_times = 0;
   Serial.println("Disarming.");
   detachInterrupt(1);//Don't check sensors until armed again
 }
 
 void sensor_ISR(void)
 {
-  //Bad guys are present! Send a threat signal!
-  radio.stopListening();
-  write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
-  radio.startListening();
-  Serial.println("Sent a threat signal.");
+  if (sent_signal_times < MAX_TIMES_TO_SEND_SIGNAL)
+  {
+    Serial.println("Bad guys! Sending threat signal.");
+    
+    //Bad guys are present! Send a threat signal!
+    radio.stopListening();
+    if (write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t)))
+      sent_signal_times++;
+    radio.startListening();
+  }
 }
 
 void check_wake_up_ISR(void)
