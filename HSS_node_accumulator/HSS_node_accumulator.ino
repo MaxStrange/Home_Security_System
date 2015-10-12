@@ -1,6 +1,6 @@
 /**
 This is the accumulator sketch. It is the node that is responsible for sounding the alarm if the right sequence of events
-happen as reported by the other sensor nodes. To save money and space, it is also a mic/pir/switch sensor node.
+happen as reported by the other sensor nodes. To save money and space, it is also a pir/switch sensor node.
 
 It sounds the alarm if it receives a signal from two different nodes (including possibly itself). If it receives
 a signal from a node, it enters the alert mode, whereupon it starts a countdown. If, within that countdown, it receives
@@ -46,7 +46,6 @@ volatile unsigned long countdown_timer = 0;
 volatile boolean alert_from_node[] = { false, false, false, false, false };//Array of alerts from nodes in the system - node 0 is this node.
 volatile boolean disarm_flag = false;
 volatile boolean arm_system_flag = false;
-volatile boolean adjust_threat_level_flag = false;
 
 void setup(void)
 {
@@ -71,6 +70,8 @@ void setup(void)
 
 void loop(void)
 { 
+  Serial.println("Going through the flags.");
+  
   /*Go through the flags and deal with them*/
   if (disarm_flag)
   {
@@ -78,19 +79,13 @@ void loop(void)
     Serial.println("Disarm flag.");
     disarm();
   }
-  
-  if (adjust_threat_level_flag)
-  {
-    adjust_threat_level_flag = false;
-    Serial.println("Adjust threat level flag.");
-    increase_threat_level();
-  }
-  
+    
   if (arm_system_flag)
   {
     arm_system_flag = false;
     Serial.println("Arm system flag.");
     system_armed = true;
+    Serial.println("System is armed.");
   }
   
   if (! system_armed)
@@ -103,24 +98,27 @@ void loop(void)
     sleep_mode();
   }
   
+  Serial.println("Adjusting threat level.");
+  adjust_threat_level();
+  
   /**Manipulate countdown timer and adjust mode accordingly**/
-  if (countdown_timer > INTRUDER_COUNTDOWN)
+  if (countdown_timer > ALARM_COUNTDOWN)
   {//Timer has wrapped around for some reason, reset it.
     Serial.println("Countdown timer has wrapped around. This shouldn't have happened.");
+    Serial.print("Timer: "); Serial.println(countdown_timer);
     countdown_timer = 0;
   }
   else if (countdown_timer > 0)
   {
-    for (int i = 1; i < 5; i++)
+    for (int i = 0; i < 5; i++)
     {
-      Serial.print("Node "); Serial.print(i); Serial.print(" "); Serial.println(alert_from_node[i]);
+      Serial.print("Node "); Serial.print(i); Serial.print(" "); Serial.println(alert_from_node[i] ? "true" : "false");
     }
-
-    
+  
     Serial.print("Counting down: "); Serial.println(countdown_timer);
     countdown_timer -= 1000;
   }
-  else
+  else if (! (disarm_flag || arm_system_flag) )//only enter this block if there are no flags to check
   {
     Serial.println("Resetting node information.");
     digitalWrite(SPEAKER, LOW);//stop sounding the alarm
@@ -129,10 +127,14 @@ void loop(void)
     reset_nodes();
     
     Serial.println("All clear, so going back to sleep.");
-    delay(1000);
+    
     if (system_armed)
+    {
+      Serial.println("Attaching sensor ISR.");
       attachInterrupt(1, sensor_ISR, LOW);
-      
+    }
+    delay(1000);
+    
     //when in all clear mode, go to sleep
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
@@ -147,16 +149,19 @@ void sensor_ISR(void)
   detachInterrupt(1);//Now that we have seen something with this node, don't bother sensing any more until we get disarmed.
   
   if (alert_from_node[0])
+  {
+    Serial.println("Returning from sensor isr because this node has already sensed.");
     return;//this node is already on alert - this is not new information
+  }
   else
+  {
     alert_from_node[0] = true;
-   
-   //if we have made it this far, it means we didn't already know that this node was on alert - increase the threat level
-   adjust_threat_level_flag = true;
+  }
 }
 
 void check_messages_ISR(void)
 {
+  Serial.println("Check messages ISR.");
   detachInterrupt(0);
   
   /**Check what happened to trigger interrupt**/
@@ -165,6 +170,7 @@ void check_messages_ISR(void)
 
   if (!rx)
   {
+    Serial.println("Not rx, so returning.");
     attachInterrupt(0, check_messages_ISR, LOW);
     return; //if it wasn't rx that woke us, we have nothing else to do.  
   }
@@ -182,12 +188,14 @@ void check_messages_ISR(void)
   if (signal == DISARM_SIGNAL)
   {//regardless of where we are, reset the system
     disarm_flag = true;
+    Serial.println("Disarm flag set to true and returning.");
     attachInterrupt(0, check_messages_ISR, LOW);
     return;
   }
   else if (signal == ARM_SIGNAL)
   {//Arm the system and return
     arm_system_flag = true;
+    Serial.println("Arm flag set to true and returning.");
     attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
     return;
   }
@@ -204,9 +212,7 @@ void check_messages_ISR(void)
     else
       alert_from_node[reading_pipe_number] = true;
     
-    
-    /**If we haven't left the ISR, it is because we have a new threat from a new node. Adjust mode and countdown.**/
-    adjust_threat_level_flag = true;
+    Serial.println("Returning from ISR.");
   }
 }
 
@@ -225,36 +231,43 @@ void disarm(void)
   attachInterrupt(0, check_messages_ISR, LOW);
 }
 
-void increase_threat_level(void)
+void adjust_threat_level(void)
 {
-  switch (danger_level)
+  unsigned int heard_from = 0;
+  for (int i = 0; i < NUMBER_OF_NODES; i++)
   {
-    case ALL_CLEAR_MODE://start counting down while you wait for the next signal
-      Serial.println("Upgrading threat level to alert mode!");
-      danger_level = ALERT_MODE;
+    if (alert_from_node[i])
+      heard_from++;
+  }
+  
+  if (heard_from == 0)
+  {//All clear
+    countdown_timer = 0;
+    Serial.println("Nothing to worry about.");
+    danger_level = ALL_CLEAR_MODE;
+  }
+  else if (heard_from == 1)
+  {//Potentially intruder alert
+    if (danger_level == ALL_CLEAR_MODE)
       countdown_timer = INTRUDER_COUNTDOWN;
-      system_armed = true;
-      break;
-    case ALERT_MODE://start sounding the alarm
-      Serial.println("Upgrading threat level to intruder detected mode! Sound the alarm!");
-      danger_level = INTRUDER_DETECTED_MODE;
-      digitalWrite(SPEAKER, HIGH);//sound the alarm!
-      countdown_timer = ALARM_COUNTDOWN;
-      system_armed = true;
-      break;
-    case INTRUDER_DETECTED_MODE://reset alarm countdown
-      Serial.println("Reset the alarm countdown! Bad guy(s) still here!");
-      countdown_timer = ALARM_COUNTDOWN;
-      system_armed = true;
-      break;
-    default:
-      Serial.println("An error has occurred in figuring out what danger level we are at.");
-      break;
+    Serial.println("Possible intruder detected.");
+    danger_level = ALERT_MODE;
+  }
+  else
+  {//Definitely intruder alert!
+    if ((danger_level == ALL_CLEAR_MODE) || (danger_level == ALERT_MODE)) 
+    countdown_timer = ALARM_COUNTDOWN;
+    Serial.println("INTRUDER DETECTED.");
+    danger_level = INTRUDER_DETECTED_MODE;
   }
 }
 
 void reset_nodes(void)
 {
+  Serial.println("Reseting nodes.");
+  
   for (int i = 0; i < NUMBER_OF_NODES; i++)
     alert_from_node[i] = false;
+    
+  Serial.println("All nodes reset.");
 }
