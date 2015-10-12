@@ -1,15 +1,11 @@
 /**
-This is the 2send node. It is a purely sensor node with a mic
-and a PIR that has been NOT'ed.
+This is the 2send node. It is a purely sensor node with a PIR 
+that has been NOT'ed.
 
 It sleeps until it hears the arm signal, after which it
 goes to sleep again, but with an interrupt to listen on its
 NOR gate line to see if any intruders are present. If so, it
 sends a threat signal to the accumulator node.
-
-It also listens on pin 2 for nRF and microphone interrupts. If it wakes up
-because of an interrupt on that pin, it checks the amplitude of the noise
-to see if it was a loud noise that woke it up. If it was, it sends a threat signal.
 
 If it ever receives the disarm signal, it goes back to sleeping
 and waiting for the arm signal.

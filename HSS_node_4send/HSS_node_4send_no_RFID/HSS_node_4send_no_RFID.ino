@@ -1,10 +1,3 @@
-/**
-This node is exactly the same as HSS_node_4send, but has no RFID and therefore no SoftwareSerial, since
-this library seems to clash with the SPI library. This sketch still freezes eventually, but for now that's okay.
-
-Arm and disarm is both accomplished via the arm button.
-*/
-
 #include <avr/interrupt.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
