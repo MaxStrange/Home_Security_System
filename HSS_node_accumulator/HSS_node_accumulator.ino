@@ -71,20 +71,17 @@ void setup(void)
 void loop(void)
 { 
   digitalWrite(SPEAKER, HIGH);
-  Serial.println("Going through the flags.");
   
   /*Go through the flags and deal with them*/
   if (disarm_flag)
   {
     disarm_flag = false;
-    Serial.println("Disarm flag.");
     disarm();
   }
     
   if (arm_system_flag)
   {
     arm_system_flag = false;
-    Serial.println("Arm system flag.");
     system_armed = true;
   }
   
@@ -98,7 +95,6 @@ void loop(void)
     sleep_mode();
   }
   
-  Serial.println("Adjusting threat level.");
   adjust_threat_level();
   
   /**Manipulate countdown timer and adjust mode accordingly**/
@@ -130,7 +126,6 @@ void loop(void)
     
     if (system_armed)
     {
-      Serial.println("Attaching sensor ISR.");
       attachInterrupt(1, sensor_ISR, LOW);
     }
     delay(1000);
@@ -145,12 +140,10 @@ void loop(void)
 
 void sensor_ISR(void)
 {
-  Serial.println("Detaching sensor ISR. Sensors will no longer work on this node until disarm.");
   detachInterrupt(1);//Now that we have seen something with this node, don't bother sensing any more until we get disarmed.
   
   if (alert_from_node[0])
   {
-    Serial.println("Returning from sensor isr because this node has already sensed.");
     return;//this node is already on alert - this is not new information
   }
   else
@@ -162,7 +155,6 @@ void sensor_ISR(void)
 void check_messages_ISR(void)
 {
   Serial.println("Check messages ISR.");
-  Serial.println("Detaching check messages ISR.");
   detachInterrupt(0);
   
   /**Check what happened to trigger interrupt**/
@@ -172,7 +164,6 @@ void check_messages_ISR(void)
   if (!rx)
   {
     Serial.println("Not rx, so returning.");
-    Serial.println("Attaching check messages ISR");
     attachInterrupt(0, check_messages_ISR, LOW);
     return; //if it wasn't rx that woke us, we have nothing else to do.  
   }
@@ -190,16 +181,14 @@ void check_messages_ISR(void)
   if (signal == DISARM_SIGNAL)
   {//regardless of where we are, reset the system
     disarm_flag = true;
-    Serial.println("Disarm flag set to true and returning.");
-    Serial.println("Attaching check messages ISR.");
+    Serial.println("DISARM.");
     attachInterrupt(0, check_messages_ISR, LOW);
     return;
   }
   else if (signal == ARM_SIGNAL)
   {//Arm the system and return
     arm_system_flag = true;
-    Serial.println("Arm flag set to true and returning.");
-    Serial.println("Attaching check messages ISR");
+    Serial.println("ARM");
     attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
     return;
   }
@@ -277,11 +266,7 @@ void adjust_threat_level(void)
 
 void reset_nodes(void)
 {
-  Serial.println("Reseting nodes.");
-  
   for (int i = 0; i < NUMBER_OF_NODES; i++)
     alert_from_node[i] = false;
-    
-  Serial.println("All nodes reset.");
 }
 

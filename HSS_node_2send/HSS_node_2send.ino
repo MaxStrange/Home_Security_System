@@ -52,7 +52,7 @@ void setup(void)
   /**Radio**/
   radio.begin();
   radio.setRetries(15, 15);//Retry 15 times with a delay of 15 microseconds between attempts
-  radio.openWritingPipe(node_ids[1]);//open up a writing pipe to the accumulator node (the accumulator node reads pipes 1 through 4)
+  radio.openWritingPipe(node_ids[2]);//open up a writing pipe to the accumulator node (the accumulator node reads pipes 1 through 4)
   radio.openReadingPipe(1, node_ids[4]);//arm/disarm node
   radio.startListening();
   
