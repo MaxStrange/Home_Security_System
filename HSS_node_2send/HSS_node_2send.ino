@@ -39,7 +39,7 @@ const int RADIO_PIN_2 = 10;
 /**Radio code**/
 RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
 //Accumulator and four other nodes. Node 4send is the arm/disarm node. The fifth is a private channel from node4 to accmltr
-byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5xxxx" };
+byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5send" };
 
 /**State**/
 volatile unsigned int sent_signal_times = 0;//Number of times this node has sent the threat signal to the accumulator

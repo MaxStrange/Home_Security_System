@@ -21,7 +21,7 @@ const int RADIO_PIN_2 = 10;
 /**Radio code**/
 RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
 //Accumulator and four other nodes. Node 4send is the arm/disarm node. The fifth is a private channel from node4 to accmltr
-byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5xxxx" };
+byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5send" };
 
 /**State**/
 volatile boolean maybe_read_a_key = false;
@@ -112,6 +112,7 @@ void sensor_ISR(void)
 {
   detachInterrupt(0);
   detachInterrupt(1);
+  Serial.println("sensor detected something. Sending threat.");
   //If this ISR is fired, it is because we are armed and either the mag switch is open or the PIR saw something
   radio.stopListening();
   radio.openWritingPipe(node_ids[5]);//open the private channel between this node and the accumulator

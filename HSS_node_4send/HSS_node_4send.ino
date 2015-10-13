@@ -51,7 +51,7 @@ const int RADIO_PIN_2 = 10;
 /**Radio code**/
 RF24 radio(RADIO_PIN_1, RADIO_PIN_2);
 //Accumulator and four other nodes. Node 4send is the arm/disarm node. The fifth is a private channel from node4 to accmltr
-byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5xxxx" };
+byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5send" };
 
 /**RFID code**/
 SoftwareSerial RFID(RFID_RX, RFID_TX);
