@@ -86,12 +86,11 @@ void loop(void)
     arm_system_flag = false;
     Serial.println("Arm system flag.");
     system_armed = true;
-    Serial.println("System is armed.");
   }
   
   if (! system_armed)
   {
-    Serial.println("Going to sleep.");
+    Serial.println("System not armed, so going to sleep.");
     delay(1000);
     //Just go to sleep until the system is armed
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -163,6 +162,7 @@ void sensor_ISR(void)
 void check_messages_ISR(void)
 {
   Serial.println("Check messages ISR.");
+  Serial.println("Detaching check messages ISR.");
   detachInterrupt(0);
   
   /**Check what happened to trigger interrupt**/
@@ -172,6 +172,7 @@ void check_messages_ISR(void)
   if (!rx)
   {
     Serial.println("Not rx, so returning.");
+    Serial.println("Attaching check messages ISR");
     attachInterrupt(0, check_messages_ISR, LOW);
     return; //if it wasn't rx that woke us, we have nothing else to do.  
   }
@@ -190,6 +191,7 @@ void check_messages_ISR(void)
   {//regardless of where we are, reset the system
     disarm_flag = true;
     Serial.println("Disarm flag set to true and returning.");
+    Serial.println("Attaching check messages ISR.");
     attachInterrupt(0, check_messages_ISR, LOW);
     return;
   }
@@ -197,6 +199,7 @@ void check_messages_ISR(void)
   {//Arm the system and return
     arm_system_flag = true;
     Serial.println("Arm flag set to true and returning.");
+    Serial.println("Attaching check messages ISR");
     attachInterrupt(0, check_messages_ISR, LOW);//Attach an interrupt on a LOW signal on Pin 3
     return;
   }
@@ -209,11 +212,15 @@ void check_messages_ISR(void)
     
     /**If it isn't a disarm signal, it is a threat signal. Ignore it if it is from a radio we already heard threat from**/
     if (alert_from_node[reading_pipe_number])//number could be 1, 2, 3, etc. 0 is reserved for accumulator node (this one).
+    {
+      attachInterrupt(0, check_messages_ISR, LOW);
       return;
+    }
     else
+    {
+      attachInterrupt(0, check_messages_ISR, LOW);
       alert_from_node[reading_pipe_number] = true;
-    
-    Serial.println("Returning from ISR.");
+    }
   }
 }
 
@@ -277,3 +284,4 @@ void reset_nodes(void)
     
   Serial.println("All nodes reset.");
 }
+

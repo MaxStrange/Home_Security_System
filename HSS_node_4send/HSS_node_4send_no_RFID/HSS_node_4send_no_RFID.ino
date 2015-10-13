@@ -9,6 +9,7 @@
 /**Constants**/
 const unsigned int SECONDS_TO_CLEAR_AREA = 3;//The number of seconds the system will give people to clear the area before arming after the arm button has been pushed
 const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a signal before giving up
+const unsigned int MAX_TIMES_TO_SEND_SIGNAL = 15;//The maximum number of times to send the threat signal to the accumulator per disarm/arm cycle
 const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
@@ -29,6 +30,7 @@ volatile boolean disarm_flag = false;
 volatile boolean arm_switch_flag = false;
 volatile boolean arm_signal_heard_flag = false;
 volatile boolean system_is_armed = false;
+volatile unsigned int sent_signal_times = 0;//Number of times this node has sent the threat signal to the accumulator 
 
 void setup(void)
 {  
@@ -110,17 +112,21 @@ void arm_disarm_ISR(void)
 
 void sensor_ISR(void)
 {
-  detachInterrupt(0);
-  detachInterrupt(1);
-  Serial.println("sensor detected something. Sending threat.");
-  //If this ISR is fired, it is because we are armed and either the mag switch is open or the PIR saw something
-  radio.stopListening();
-  radio.openWritingPipe(node_ids[5]);//open the private channel between this node and the accumulator
-  write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t));
-  radio.openWritingPipe(node_ids[4]);//reopen the broadcast channel - close the other channel
-  maybe_read_a_key = false;//Reading keys is not why you woke up.
-  attachInterrupt(0, arm_disarm_ISR, LOW);
-  attachInterrupt(1, sensor_ISR, LOW);
+  if (sent_signal_times < MAX_TIMES_TO_SEND_SIGNAL)
+  {
+    detachInterrupt(0);
+    detachInterrupt(1);
+    Serial.println("sensor detected something. Sending threat.");
+    //If this ISR is fired, it is because we are armed and either the mag switch is open or the PIR saw something
+    radio.stopListening();
+    radio.openWritingPipe(node_ids[5]);//open the private channel between this node and the accumulator
+    if (write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t)))
+      sent_signal_times++;
+    radio.openWritingPipe(node_ids[4]);//reopen the broadcast channel - close the other channel
+    maybe_read_a_key = false;//Reading keys is not why you woke up.
+    attachInterrupt(0, arm_disarm_ISR, LOW);
+    attachInterrupt(1, sensor_ISR, LOW);
+  }
 }
 
 void arm_self(void)
@@ -152,10 +158,11 @@ void arm_system(void)
 
 void disarm_system(void)
 {
+  detachInterrupt(1);//detach sensor ISR
   Serial.println("Disarm system.");
   broadcast_signal(DISARM_SIGNAL);
   system_is_armed = false;
-  detachInterrupt(1);//detach sensor ISR
+  sent_signal_times = 0;
 }
 
 void broadcast_signal(uint16_t signal)
