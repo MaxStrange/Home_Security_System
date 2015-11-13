@@ -15,6 +15,7 @@ const uint16_t ARM_SIGNAL = 0x1221;
 
 /**Pin declarations**/
 const int SENSORS = 3;//Mag switch NOR'd with a PIR signal
+const int LED = 8;
 const int RADIO_PIN_1 = 9;
 const int RADIO_PIN_2 = 10;
 
@@ -43,6 +44,7 @@ void setup(void)
 {  
   /**Pins**/
   pinMode(SENSORS, INPUT);
+  pinMode(LED, OUTPUT);
   
   /**Radio**/
   radio.begin();
@@ -72,6 +74,7 @@ void loop(void)
     Serial.println("Disarm flag.");
     disarm_system();
     disarm_flag = false;//clear the flag
+    digitalWrite(LED, HIGH);
     Serial.println("Disarm flag cleared.");
   }
   
@@ -92,9 +95,10 @@ void loop(void)
     Serial.println("Arm signal heard flag cleared.");
   }
   
-  //All done with work that needed to be done. Put the RFID/nRF interrupt back on and go to sleep.
+  //All done with work that needed to be done. Put the RFID/nRF/Arm_switch interrupt back on and go to sleep.
   Serial.println("Sleep.");
   delay(1000);
+  digitalWrite(LED, LOW);
   attachInterrupt(0, arm_disarm_ISR, LOW);
   go_to_sleep();
 }
