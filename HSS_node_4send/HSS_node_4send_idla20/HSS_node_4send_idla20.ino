@@ -1,3 +1,34 @@
+/**
+This is the 4send node. It is the node responsible for sending
+the arm/disarm signal to the rest of the nodes. It also has
+sensor (PIR and magnetic switch) through a NOR gate (so they
+are active low).
+
+It sleeps until an interrupt on pin 2 wakes it. Pin 2 could
+be one of three things: the RFID has sensed a tag in range,
+the nRF has sent an IRQ (probably because it received a 
+signal), and/or the arm button was pushed. It first checks
+its nRF module to see if that was what woke it. If it was, and
+it received an arm signal (which is impossible until I get
+a raspberry pi online), it arms itself (sets up an interrupt
+from the sensors on pin 3) and goes back to sleep. Whether or
+not it was the nRF that woke it, it also checks to see if
+the RFID module has a card waiting to be read. If it does,
+it reads the card and, if the card is one of the known ones,
+it disarms itself and broadcasts the disarm signal. If neither
+of these things was what woke it from sleep, it must have
+been the arm signal. If it was, it broadcasts the arm signal
+and arms itself (puts the sensor interrupt on pin 3) and
+goes back to sleep.
+
+Once armed, it sleeps until woken up by either an interrupt
+on pin 2 (in which case, see above) or an interrupt on pin 3,
+in which case it has sensed an intruder and it therefore sends
+a threat signal to the accumulator node. Once it has sent
+this message and it is reasonably sure it has been heard, it
+will not send its threat signal again until disarmed and 
+re-armed or a power cycle happens.
+*/
 #include <avr/interrupt.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
@@ -26,13 +57,13 @@ byte node_ids[][6] = { "cmltr", "1send", "2send", "3send", "4send" , "5send" };
 
 /**RFID code**/
 const int KEY_LENGTH = 16;
-int key_a[KEY_LENGTH] = { 63, 100, 94, 230, 166, 102, 230, 76, 102, 166, 201, 201, 202, 214, 242, 0 };
-int key_b[KEY_LENGTH] = { 63, 100, 94, 230, 166, 102, 166, 76, 153, 166, 76, 153, 202, 214, 242, 0 };
-int key_c[KEY_LENGTH] = { 63, 100, 94, 230, 166, 166, 204, 151, 204, 201, 62, 234, 202, 214, 242, 0 };
-int incoming_key[KEY_LENGTH] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+char key_a[KEY_LENGTH] = { 63, 100, 94, 230, 166, 102, 230, 76, 102, 166, 201, 201, 202, 214, 242, 0 };
+char key_b[KEY_LENGTH] = { 63, 100, 94, 230, 166, 102, 166, 76, 153, 166, 76, 153, 202, 214, 242, 0 };
+char key_c[KEY_LENGTH] = { 63, 100, 94, 230, 166, 166, 204, 151, 204, 201, 62, 234, 202, 214, 242, 0 };
+char incoming_key[KEY_LENGTH] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+String input_string = "";
 
 /**State**/
-volatile boolean maybe_read_a_key = false;
 volatile boolean disarm_flag = false;
 volatile boolean rfid_flag = false;
 volatile boolean arm_switch_flag = false;
@@ -53,17 +84,21 @@ void setup(void)
   
   /**RFID**/
   Serial.begin(9600);
+  input_string.reserve(20);
 }
 
 void loop(void)
 {
+  serialEvent();
+  
   if (rfid_flag)
   {//check if there is rfid data waiting on serial
     Serial.println("RFID flag.");
-    if (read_incoming())
+    if (check_rfid())
     {
       disarm_flag = true;
       arm_switch_flag = false;
+      Serial.println("known key");
     }
     rfid_flag = false;//clear the flag
     Serial.println("RFID flag cleared.");
@@ -74,7 +109,7 @@ void loop(void)
     Serial.println("Disarm flag.");
     disarm_system();
     disarm_flag = false;//clear the flag
-    digitalWrite(LED, HIGH);
+    digitalWrite(LED, HIGH); 
     Serial.println("Disarm flag cleared.");
   }
   
@@ -97,7 +132,7 @@ void loop(void)
   
   //All done with work that needed to be done. Put the RFID/nRF/Arm_switch interrupt back on and go to sleep.
   Serial.println("Sleep.");
-  delay(1000);
+  delay(500);
   digitalWrite(LED, LOW);
   attachInterrupt(0, arm_disarm_ISR, LOW);
   go_to_sleep();
@@ -148,9 +183,12 @@ void sensor_ISR(void)
     if (write_to_radio(&THREAT_SIGNAL, sizeof(uint16_t)))
       sent_signal_times++;
     radio.openWritingPipe(node_ids[4]);//reopen the broadcast channel - close the other channel
-    maybe_read_a_key = false;//Reading keys is not why you woke up.
     attachInterrupt(0, arm_disarm_ISR, LOW);
     attachInterrupt(1, sensor_ISR, LOW);
+  }
+  else
+  {//we have already bugged the accumulator enough - it probably heard us by now, so let's just stop trying
+    detachInterrupt(1);
   }
 }
 
@@ -199,10 +237,10 @@ void broadcast_signal(uint16_t signal)
 
 void go_to_sleep(void)
 {
-  set_sleep_mode(SLEEP_MODE_STANDBY);//standby works - but no deeper - only takes 6 clock cycles to boot back up
+  set_sleep_mode(SLEEP_MODE_IDLE);
+  //set_sleep_mode(SLEEP_MODE_STANDBY);//standby works - but no deeper - only takes 6 clock cycles to boot back up
   sleep_enable();
   sleep_mode();
-  Serial.println("Wake up.");
 }
 
 boolean write_to_radio(const void * to_write, uint8_t len)
@@ -224,50 +262,26 @@ boolean write_to_radio(const void * to_write, uint8_t len)
   return false;
 }
 
-boolean read_incoming(void)
+void serialEvent()
 {
-  Serial.println("Read incoming.");
-  delay(200);
-  if (Serial.available())
-  {
-    for (int i = 0; i < KEY_LENGTH; i++)
-    {
-      incoming_key[i] = Serial.read();
-    }
-    Serial.flush();
-    
-    if (check_incoming())
-      return true;
-  }
-  return false;
+   while (Serial.available())
+   {
+     char inChar = (char)Serial.read();  
+     input_string += inChar;
+   }
+   
+   input_string.toCharArray(incoming_key, KEY_LENGTH);
 }
 
-boolean check_incoming(void)
+boolean check_rfid()
 {
-  if (compare_keys(key_a, incoming_key))
-    return true;
-  else if (compare_keys(key_b, incoming_key))
-    return true;
-  else if (compare_keys(key_c, incoming_key))
-    return true;
-  else
-    return false;
-}
-
-boolean compare_keys(int aa[16], int bb[16])
-{
-  boolean ff = false;
-  int fg = 0;
-  for (int cc = 0 ; cc < 16 ; cc++)
-  {
-    if (aa[cc] == bb[cc])
-    {
-      fg++;
-    }
-  }
-  if (fg == 16)
-  {
-    ff = true;
-  }
-  return ff;
+   for (int i = 0; i < KEY_LENGTH; i++)
+   {
+     if ((incoming_key[i] != key_a[i]) && (incoming_key[i] != key_b[i]) && (incoming_key[i] != key_c[i]))
+     {
+       return false;
+     }
+   }
+   
+   return true;
 }
