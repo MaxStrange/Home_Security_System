@@ -27,6 +27,7 @@ const uint16_t THREAT_SIGNAL = 0x1BA0;
 const uint16_t DISARM_SIGNAL = 0x1151;
 const uint16_t ARM_SIGNAL = 0x1221;
 const unsigned int NUMBER_OF_NODES = 5;//Number of nodes in the system including this one
+const unsigned int TIME_TO_DISARM = 10000;//10,000 milliseconds (10 seconds)//The time you have to disarm the system before alarm
 
 /**Pin declarations**/
 const int SENSORS = 3;//PIR and Mag switch through a NOR gate - so LOW when bad guy detected
@@ -46,6 +47,7 @@ volatile unsigned long countdown_timer = 0;
 volatile boolean alert_from_node[] = { false, false, false, false, false };//Array of alerts from nodes in the system - node 0 is this node.
 volatile boolean disarm_flag = false;
 volatile boolean arm_system_flag = false;
+boolean alarm_sounding = false;
 
 void setup(void)
 {
@@ -118,6 +120,7 @@ void loop(void)
   {
     Serial.println("Resetting node information.");
     digitalWrite(SPEAKER, HIGH);//stop sounding the alarm
+    alarm_sounding = false;
     countdown_timer = 0;
     danger_level = ALL_CLEAR_MODE;
     reset_nodes();
@@ -141,7 +144,7 @@ void loop(void)
 void sensor_ISR(void)
 {
   detachInterrupt(1);//Now that we have seen something with this node, don't bother sensing any more until we get disarmed.
-  
+  Serial.println("sensor tripped.");
   if (alert_from_node[0])
   {
     return;//this node is already on alert - this is not new information
@@ -221,6 +224,7 @@ void disarm(void)
   system_armed = false;
   
   digitalWrite(SPEAKER, HIGH);//stop sounding the alarm
+  alarm_sounding = false;
   countdown_timer = 0;
   danger_level = ALL_CLEAR_MODE;
   reset_nodes();
@@ -260,7 +264,22 @@ void adjust_threat_level(void)
     Serial.println("INTRUDER DETECTED.");
     danger_level = INTRUDER_DETECTED_MODE;
     
-    digitalWrite(SPEAKER, LOW);
+    if (alarm_sounding == false)
+    {
+      //wait however long before sounding the alarm - could be just us getting home and disarming system
+      for (int i = TIME_TO_DISARM; i >= 0; i -= 1000)
+      {
+        delay(1000);
+        Serial.print("Time before alarm: "); Serial.println(i);
+      }
+    }
+    
+    
+    if (danger_level == INTRUDER_DETECTED_MODE)//may have changed due to interrupt during the countdown
+    {
+      alarm_sounding = true;
+      digitalWrite(SPEAKER, LOW);
+    }  
   }
 }
 

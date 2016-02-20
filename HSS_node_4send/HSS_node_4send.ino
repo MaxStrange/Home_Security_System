@@ -37,7 +37,7 @@ re-armed or a power cycle happens.
 #include "RF24.h"
 
 /**Constants**/
-const unsigned int SECONDS_TO_CLEAR_AREA = 3;//The number of seconds the system will give people to clear the area before arming after the arm button has been pushed
+const unsigned int SECONDS_TO_CLEAR_AREA = 30;//The number of seconds the system will give people to clear the area before arming after the arm button has been pushed
 const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a signal before giving up
 const unsigned int MAX_TIMES_TO_SEND_SIGNAL = 15;//The maximum number of times to send the threat signal to the accumulator per disarm/arm cycle
 const uint16_t THREAT_SIGNAL = 0x1BA0;
@@ -83,7 +83,7 @@ void setup(void)
   radio.openWritingPipe(node_ids[4]);//open up a broadcasting pipe - all other nodes listen to this pipe
   
   /**RFID**/
-  Serial.begin(9600);
+  Serial.begin(115200);
   input_string.reserve(20);
 }
 
@@ -131,7 +131,6 @@ void loop(void)
   }
   
   //All done with work that needed to be done. Put the RFID/nRF/Arm_switch interrupt back on and go to sleep.
-  Serial.println("Sleep.");
   delay(500);
   digitalWrite(LED, LOW);
   attachInterrupt(0, arm_disarm_ISR, LOW);

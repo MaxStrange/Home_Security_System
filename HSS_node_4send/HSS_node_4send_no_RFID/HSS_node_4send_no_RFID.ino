@@ -2,7 +2,6 @@
 #include <avr/power.h>
 #include <avr/sleep.h>
 #include <avr/io.h>
-#include <avr/wdt.h>
 #include <SPI.h>
 #include "RF24.h"
 
@@ -42,7 +41,7 @@ void setup(void)
   radio.setRetries(15, 15);//Retry 15 times with a delay of 15 microseconds between attempts
   radio.openWritingPipe(node_ids[4]);//open up a broadcasting pipe - all other nodes listen to this pipe
   
-  Serial.begin(115200);
+  Serial.begin(9600);
 }
 
 void loop(void)
@@ -78,9 +77,7 @@ void loop(void)
   Serial.println("Sleep.");
   delay(1000);
   attachInterrupt(0, arm_disarm_ISR, LOW);
-  set_sleep_mode(SLEEP_MODE_STANDBY);//standby works - but no deeper - only takes 6 clock cycles to boot back up
-  sleep_enable();
-  sleep_mode();
+  go_to_sleep();
 }
 
 void arm_disarm_ISR(void)
@@ -170,6 +167,14 @@ void broadcast_signal(uint16_t signal)
   Serial.println("Broadcast signal.");
   radio.stopListening();
   write_to_radio(&signal, sizeof(uint16_t));
+}
+
+void go_to_sleep(void)
+{
+  set_sleep_mode(SLEEP_MODE_STANDBY);//standby works - but no deeper - only takes 6 clock cycles to boot back up
+  sleep_enable();
+  sleep_mode();
+  Serial.println("Wake up.");
 }
 
 boolean write_to_radio(const void * to_write, uint8_t len)

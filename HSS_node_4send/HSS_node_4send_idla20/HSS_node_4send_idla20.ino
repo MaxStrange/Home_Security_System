@@ -37,7 +37,7 @@ re-armed or a power cycle happens.
 #include "RF24.h"
 
 /**Constants**/
-const unsigned int SECONDS_TO_CLEAR_AREA = 3;//The number of seconds the system will give people to clear the area before arming after the arm button has been pushed
+const unsigned int SECONDS_TO_CLEAR_AREA = 30;//The number of seconds the system will give people to clear the area before arming after the arm button has been pushed
 const unsigned int TIMES_TO_SEND = 6;//The number of times to try to send a signal before giving up
 const unsigned int MAX_TIMES_TO_SEND_SIGNAL = 15;//The maximum number of times to send the threat signal to the accumulator per disarm/arm cycle
 const uint16_t THREAT_SIGNAL = 0x1BA0;
@@ -70,6 +70,7 @@ volatile boolean arm_switch_flag = false;
 volatile boolean arm_signal_heard_flag = false;
 volatile boolean system_is_armed = false;
 volatile unsigned int sent_signal_times = 0;//Number of times this node has sent the threat signal to the accumulator 
+unsigned int arm_button_held_down_count = 0;//Duration that the arm button has been held for
 
 void setup(void)
 {  
@@ -98,8 +99,12 @@ void loop(void)
     {
       disarm_flag = true;
       arm_switch_flag = false;
+      arm_button_held_down_count = 0;
       Serial.println("known key");
     }
+    //now flush the rfid so that it doesn't contain any leftover data
+    input_string = "";
+    Serial.println("Input buffer flushed.");
     rfid_flag = false;//clear the flag
     Serial.println("RFID flag cleared.");
   }
@@ -117,8 +122,22 @@ void loop(void)
   {//arm the system - broadcast the arm signal and then arm yourself
     Serial.println("Arm switch flag.");
     arm_switch_flag = false;//clear the flag
-    if (!system_is_armed)
-      arm_system();
+    
+    if (check_rfid())
+    {
+      Serial.println("Key is present.");
+    }
+    else
+    {
+      if (!system_is_armed)
+        arm_button_held_down_count++;
+        
+      Serial.print("Arm button held: "); Serial.println(arm_button_held_down_count);
+      
+      if ((arm_button_held_down_count >= 5) && (!system_is_armed))
+        arm_system();
+    }
+    
     Serial.println("Arm switch flag cleared.");
   }
   
@@ -203,6 +222,8 @@ void arm_self(void)
 void arm_system(void)
 {
   Serial.println("Arm system.");
+  arm_button_held_down_count = 0;
+  
   
   /*Delay for how ever many seconds, checking for a key every second*/
     boolean do_not_arm = false;
