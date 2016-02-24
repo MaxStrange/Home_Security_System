@@ -85,6 +85,7 @@ void loop(void)
   {
     arm_system_flag = false;
     system_armed = true;
+    attachInterrupt(1, sensor_ISR, LOW);
   }
   
   if (! system_armed)
@@ -279,7 +280,13 @@ void adjust_threat_level(void)
     {
       alarm_sounding = true;
       digitalWrite(SPEAKER, LOW);
-    }  
+    }
+    
+    if (disarm_flag)
+    {//If the system was disarmed while in this method, disarm it.
+      disarm_flag = false;
+      disarm();
+    }
   }
 }
 

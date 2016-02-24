@@ -223,21 +223,21 @@ void arm_system(void)
 {
   Serial.println("Arm system.");
   arm_button_held_down_count = 0;
-  
+  digitalWrite(LED, HIGH); 
   
   /*Delay for how ever many seconds, checking for a key every second*/
-    boolean do_not_arm = false;
-    for (int i = SECONDS_TO_CLEAR_AREA; i > 0; i--)
-    {
-      Serial.print("Countdown: "); Serial.println(i);
-      delay(1000);
-    }
-    
-    if (!do_not_arm)
-    {
-      broadcast_signal(ARM_SIGNAL);
-      arm_self();
-    }
+  boolean do_not_arm = false;
+  for (int i = SECONDS_TO_CLEAR_AREA; i > 0; i--)
+  {
+    Serial.print("Countdown: "); Serial.println(i);
+    delay(1000);
+  }
+  
+  if (!do_not_arm)
+  {
+    broadcast_signal(ARM_SIGNAL);
+    arm_self();
+  }
 }
 
 void disarm_system(void)
